@@ -1,0 +1,23 @@
+# Pemilik area wajib me-review PR yang menyentuh areanya.
+# FE: shzirley | BE-1 (Data & Security): Pardofel1s | BE-2 (AI & Tools): build-zaidana
+
+*                                          @Pardofel1s
+
+# FE - Livewire UI & NativePHP packaging
+/resources/                                @shzirley
+/app/Livewire/                             @shzirley
+/config/nativephp.php                      @shzirley
+/app/Providers/NativeAppServiceProvider.php @shzirley
+
+# BE-1 - Database, Models, Auth, RBAC, HTTP layer
+/database/                                 @Pardofel1s
+/app/Models/                               @Pardofel1s
+/app/Http/                                 @Pardofel1s
+/routes/                                   @Pardofel1s
+/config/permission.php                     @Pardofel1s
+
+# BE-2 - LLM, Tool Registry, Action classes, Queue
+/app/Tools/                                @build-zaidana
+/app/Services/                             @build-zaidana
+/app/Jobs/                                 @build-zaidana
+/config/llm.php                            @build-zaidana
