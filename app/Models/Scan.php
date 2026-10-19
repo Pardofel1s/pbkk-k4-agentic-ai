@@ -18,6 +18,8 @@ class Scan extends Model
     use HasFactory;
     use PrunesOrphanComments;
 
+    public const COMPLETED = 'completed';
+
     /**
      * Get the attributes that should be cast.
      *
