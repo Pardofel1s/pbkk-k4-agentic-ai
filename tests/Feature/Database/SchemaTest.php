@@ -34,16 +34,19 @@ it('shows the chat history with a constant number of queries (no N+1)', function
         return count(DB::getQueryLog());
     };
 
-    expect($countQueries(chatWithToolCalls($user, 2)))
+    $small = chatWithToolCalls($user, 2);
+    $countQueries($small); // warm-up: the first request also loads the Spatie permission cache
+
+    expect($countQueries($small))
         ->toBe($countQueries(chatWithToolCalls($user, 10)));
 });
 
-it('hides other users\' chat sessions', function () {
-    $session = chatWithToolCalls(User::factory()->create(), 1);
+it('forbids other analysts from reading a chat session', function () {
+    $session = chatWithToolCalls(User::factory()->create()->assignRole('analyst'), 1);
 
-    $this->actingAs(User::factory()->create())
+    $this->actingAs(User::factory()->create()->assignRole('analyst'))
         ->get(route('chat-sessions.show', $session))
-        ->assertNotFound();
+        ->assertForbidden();
 });
 
 it('cascades deletes from a user down to messages and tool calls', function () {

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Certificate;
 use App\Models\ChatMessage;
 use App\Models\ChatSession;
+use App\Models\Comment;
 use App\Models\Finding;
 use App\Models\Report;
 use App\Models\Scan;
@@ -28,17 +29,21 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $user = User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        $this->call(RolesAndAdminSeeder::class);
+
+        // Dev logins (password: "password"); the admin comes from ADMIN_* in .env.
+        $analyst = User::factory()->create(['name' => 'Analyst', 'email' => 'analyst@example.com'])
+            ->assignRole('analyst');
+        $client = User::factory()->create(['name' => 'Client PT XXX', 'email' => 'client@example.com'])
+            ->assignRole('client');
 
         $types = VulnerabilityType::factory(5)->create();
         $profiles = ScanProfile::factory(3)->create();
         $tools = Tool::factory(3)->create();
 
         $targets = Target::factory(2)
-            ->for($user)
+            ->for($client)
+            ->state(['status_verifikasi' => Target::VERIFIED])
             ->has(TargetScopeRule::factory(2))
             ->has(TargetTestAccount::factory(2))
             ->create();
@@ -57,8 +62,14 @@ class DatabaseSeeder extends Seeder
             Certificate::factory()->for($retest)->create();
         }
 
+        $discussed = $findings->first();
+        Comment::factory()->for($client)->for($discussed, 'commentable')
+            ->create(['isi' => 'Sudah kami patch di staging, mohon re-test.']);
+        Comment::factory()->for($analyst)->for($discussed, 'commentable')
+            ->create(['isi' => 'Siap, re-test dijadwalkan.']);
+
         ChatSession::factory(3)
-            ->for($user)
+            ->for($analyst)
             ->has(ChatMessage::factory(4))
             ->create();
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\PrunesOrphanComments;
 use Database\Factories\ScanFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,6 +16,7 @@ class Scan extends Model
 {
     /** @use HasFactory<ScanFactory> */
     use HasFactory;
+    use PrunesOrphanComments;
 
     /**
      * Get the attributes that should be cast.

@@ -53,7 +53,7 @@ Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah
    composer run setup
    ```
 
-   `setup` meng-copy `.env`, generate key, migrate SQLite, dan build asset.
+   `setup` meng-copy `.env`, generate key, migrate SQLite, dan build asset. Lalu isi `ADMIN_PASSWORD` di `.env` dan jalankan `php artisan db:seed` untuk role, admin, dan data dummy (login dev: `analyst@example.com` / `client@example.com`, password `password`).
 4. Isi `LLM_API_KEY` di `.env` — **tanya langsung ke Kamal ([@Pardofel1s](https://github.com/Pardofel1s))** lewat chat pribadi. Jangan di-commit dan jangan ditempel di grup/issue/PR. Mau pakai Ollama lokal? Ganti `LLM_BASE_URL=http://localhost:11434/v1` dan kosongkan key.
 5. Jalankan:
 
@@ -157,7 +157,7 @@ Repo ini sudah berisi guideline & skill resmi Laravel ([Laravel Boost](https://l
 
 Model inti Week 9: `User` → `ChatSession` → `ChatMessage` → `ToolCall` (= *ToolExecutionLog* di slide). Sisanya domain DAST.
 
-> Direncanakan (belum ada migration): tabel `comments` polymorphic (`Finding` / `Report`) — lihat [`docs/rbac.md`](docs/rbac.md).
+Akses (role, permission, policy) dijelaskan di [`docs/rbac.md`](docs/rbac.md); tabel Spatie (`roles`, `permissions`, `model_has_roles`, …) tidak digambar.
 
 ```mermaid
 erDiagram
@@ -177,6 +177,9 @@ erDiagram
     vulnerability_types ||--o{ findings : classifies
     scans ||--o{ reports : produces
     scans ||--o| certificates : earns
+    users ||--o{ comments : writes
+    findings ||--o{ comments : "commentable (morph)"
+    reports ||--o{ comments : "commentable (morph)"
 
     users {
         bigint id PK
@@ -281,6 +284,13 @@ erDiagram
         string file_path
         timestamp generated_at
     }
+    comments {
+        bigint id PK
+        bigint user_id FK
+        string commentable_type "polymorphic"
+        bigint commentable_id "polymorphic"
+        text isi
+    }
     certificates {
         bigint id PK
         bigint scan_id FK, UK
@@ -292,6 +302,6 @@ erDiagram
 
 Semua tabel juga punya `created_at`/`updated_at`.
 
-- **Polymorphic (A+):** `tool_calls.loggable` = subjek yang dikenai tool, saat ini `Target` atau `Finding` (`morphMany('loggable')`). Tambah model lain cukup dengan relasi `morphMany` baru.
+- **Polymorphic (A+):** `tool_calls.loggable` = subjek yang dikenai tool, saat ini `Target` atau `Finding` (`morphMany('loggable')`). `comments.commentable` = `Finding` atau `Report`; karena tidak bisa diberi FK, komentar yatim dibersihkan `Comment::pruneOrphans()` setiap kali user/target/scan/finding/report dihapus.
 - **onDelete:** relasi kepemilikan `cascade` (user → chat/target → scan → finding/report/certificate, message → tool call). Tabel lookup (`tools`, `scan_profiles`, `vulnerability_types`) `restrict`. `scan_id`, `target_test_account_id`, `retest_of_id` → `set null`.
-- **Bebas N+1:** `ChatSessionController@show` memuat `chatMessages.toolCalls.tool` + `chatMessages.toolCalls.loggable` sekaligus; `Model::preventLazyLoading()` aktif di luar production, dan `tests/Feature/Database/SchemaTest.php` memastikan jumlah query konstan. Screenshot Debugbar: `php artisan migrate:fresh --seed`, login `test@example.com` / `password`, buka `/chat-sessions/1`.
+- **Bebas N+1:** `ChatSessionController@show` memuat `chatMessages.toolCalls.tool` + `chatMessages.toolCalls.loggable` sekaligus; `Model::preventLazyLoading()` aktif di luar production, dan `tests/Feature/Database/SchemaTest.php` memastikan jumlah query konstan. Screenshot Debugbar: `php artisan migrate:fresh --seed`, login `analyst@example.com` / `password`, buka `/chat-sessions/1`.

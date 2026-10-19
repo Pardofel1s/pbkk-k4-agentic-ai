@@ -1,6 +1,6 @@
 # Desain RBAC (Spatie Laravel Permission)
 
-Status: **disepakati, belum diimplementasi.** Implementasi backend oleh BE-1 di branch `feat/be1-rbac`; halaman oleh FE.
+Status: **backend sudah diimplementasi** (BE-1, `feat/be1-rbac`). Halaman per role dikerjakan FE — lihat [Cara pakai untuk FE / BE-2](#cara-pakai-untuk-fe--be-2).
 
 > Jangan tertukar: *nasabah / mitra / admin* di [`rancangan.md`](rancangan.md) adalah user **aplikasi target PT XXX**. Mereka disimpan sebagai akun uji di `target_test_accounts.label_role`, **bukan** role Spatie. RBAC di dokumen ini mengatur siapa yang memakai **aplikasi DAST kita**.
 
@@ -86,13 +86,13 @@ comments: id, user_id (FK cascade), commentable_type, commentable_id, isi (text)
 ## Pembagian kerja
 
 **BE-1 (@Pardofel1s)**
-- [ ] Migration + model + factory `Comment`
-- [ ] `RolesAndAdminSeeder`, `HasRoles` di `User`, `ADMIN_EMAIL` / `ADMIN_PASSWORD` di `.env.example`
-- [ ] Policy di atas + registrasi
-- [ ] Action class: `CreateTarget` (admin → verified, client → pending), `VerifyTarget`, `RegisterAnalyst`
-- [ ] Route + middleware `can:`
-- [ ] Satu baris di area FE (minta review @shzirley): `assignRole('client')` di `livewire/pages/auth/register.blade.php`, panggil seeder di `NativeAppServiceProvider::boot()`
-- [ ] Test: tiap role diizinkan/ditolak, IDOR antar client, target terkunci setelah verified, register = client, pembersihan komentar
+- [x] Migration + model + factory `Comment`
+- [x] `RolesAndAdminSeeder`, `HasRoles` di `User`, `ADMIN_EMAIL` / `ADMIN_PASSWORD` di `.env.example`
+- [x] Policy di atas (auto-discovery Laravel, tanpa registrasi manual) + `UserPolicy`
+- [x] Action class: `CreateTarget` (admin → verified, client → pending), `VerifyTarget`, `RegisterAnalyst`
+- [x] Route + middleware `can:`
+- [x] Satu baris di area FE (minta review @shzirley): `assignRole('client')` di `livewire/pages/auth/register.blade.php`, panggil seeder di `NativeAppServiceProvider::boot()`
+- [x] Test: tiap role diizinkan/ditolak, IDOR antar client, target terkunci setelah verified, register = client, pembersihan komentar
 
 **FE (@shzirley)** — halaman Volt memanggil `$this->authorize(...)` + action class BE-1; menu disembunyikan dengan `@can`
 - [ ] Target: daftar, form (client & admin), halaman verifikasi (admin)
@@ -102,6 +102,48 @@ comments: id, user_id (FK cascade), commentable_type, commentable_id, isi (text)
 
 **BE-2 (@build-zaidana)**
 - [ ] Agent loop & tool hanya jalan untuk user dengan `chat.use` / `scans.run`, dan hanya ke target `verified`
+
+## Cara pakai untuk FE / BE-2
+
+Akun dev setelah `php artisan migrate:fresh --seed` (password `password`): `analyst@example.com`, `client@example.com`. Admin dari `ADMIN_EMAIL` / `ADMIN_PASSWORD` di `.env`.
+
+**Route baru** — controller biasa: `auth` + `can:` (contoh `chat-sessions.show` di `routes/web.php`). Halaman Volt full-page: `auth` di route, lalu `authorize()` di `mount()`:
+
+```php
+// routes/web.php
+Volt::route('targets/{target}', 'targets.show')->middleware('auth')->name('targets.show');
+
+// resources/views/livewire/targets/show.blade.php
+public function mount(Target $target): void
+{
+    $this->authorize('view', $target);
+    $this->target = $target;
+}
+```
+
+**Di komponen Volt / Livewire:**
+
+```php
+// Daftar: jangan Target::all() — pakai scope yang sudah memfilter per user
+Target::visibleTo(auth()->user())->latest()->get();
+
+// Cek sebelum aksi (403 kalau ditolak)
+$this->authorize('update', $target);               // edit target, scope rules, akun uji
+$this->authorize('create', [Scan::class, $target]); // jalankan scan (analyst + target verified)
+$this->authorize('create', [Comment::class, $finding]);
+
+// Aksi yang punya aturan khusus: panggil action class (validasi + otorisasi sudah di dalam)
+app(CreateTarget::class)->handle(auth()->user(), $this->only(['nama', 'base_url', 'lingkungan']));
+app(VerifyTarget::class)->handle(auth()->user(), $target, Target::VERIFIED);
+app(RegisterAnalyst::class)->handle(auth()->user(), $this->only(['name', 'email', 'password', 'password_confirmation']));
+```
+
+**Di Blade:** `@can('targets.verify') ... @endcan`, `@can('view', $report) ... @endcan`.
+
+- `status_verifikasi` **tidak fillable** — jangan set lewat `update()` / `create()`; hanya lewat `CreateTarget` / `VerifyTarget`.
+- Komentar: `$finding->comments()->make(['isi' => $isi])->user()->associate(auth()->user())->save()` setelah `authorize('create', [Comment::class, $finding])`. Hapus: `authorize('delete', $comment)`.
+- Kepemilikan dicek lewat query (`User::ownsTarget()`, `User::ownsScan()`), jadi aman dipakai di dalam loop meski `preventLazyLoading()` aktif.
+- BE-2: sebelum agent menjalankan tool, cek `$user->can('create', [Scan::class, $target])` (analyst + target verified) di samping allowlist host.
 
 ## Belum diputuskan (bukan RBAC)
 
