@@ -29,7 +29,7 @@ readonly class ChatResponse
         $message = $data['choices'][0]['message'] ?? [];
 
         $toolCalls = array_map(
-            fn (array $call) => ToolCall::fromArray($call),
+            fn (array $call): ToolCall => ToolCall::fromArray($call),
             $message['tool_calls'] ?? [],
         );
 

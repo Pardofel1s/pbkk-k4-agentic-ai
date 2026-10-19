@@ -5,8 +5,6 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 
-uses(Tests\TestCase::class);
-
 it('only allows localhost and 127.0.0.1 by default', function () {
     Http::fake();
 
@@ -43,7 +41,6 @@ describe('with example.test allowed', function () {
         expect($result)->toContain('HTTP 200')
             ->toContain('Content-Security-Policy')
             ->toContain('nosniff')
-            // not returned by the fake, so it must be listed as missing
             ->toContain('Strict-Transport-Security (forces HTTPS (HSTS))');
 
         Http::assertSent(fn (Request $request) => $request->url() === 'https://example.test');

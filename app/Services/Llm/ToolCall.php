@@ -21,6 +21,9 @@ readonly class ToolCall
     /**
      * Build from one element of the OpenAI `tool_calls` array.
      *
+     * Providers send `arguments` as a JSON-encoded string (some Ollama
+     * versions send an object); invalid or non-object JSON becomes [].
+     *
      * @param  array<string, mixed>  $data
      */
     public static function fromArray(array $data): self
@@ -28,7 +31,6 @@ readonly class ToolCall
         $function = $data['function'] ?? [];
         $arguments = $function['arguments'] ?? '{}';
 
-        // The provider sends arguments as a JSON-encoded string.
         if (is_string($arguments)) {
             $arguments = json_decode($arguments, true) ?? [];
         }

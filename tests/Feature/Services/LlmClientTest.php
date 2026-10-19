@@ -7,8 +7,6 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 
-uses(Tests\TestCase::class);
-
 beforeEach(function () {
     config()->set('llm.base_url', 'https://llm.test/v1');
     config()->set('llm.model', 'qwen3:14b');
@@ -37,8 +35,6 @@ beforeEach(function () {
         }
     };
 
-    // Kept on the test case instead of global helpers, so names cannot clash
-    // with helpers in other Pest files.
     $this->bareClient = new LlmClient(new ToolRegistry([]));
     $this->toolClient = new LlmClient(new ToolRegistry([$stubTool]));
 });

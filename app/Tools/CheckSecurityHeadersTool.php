@@ -58,11 +58,14 @@ class CheckSecurityHeadersTool implements Tool
 
     /**
      * Arguments come straight from the LLM, so validate before making a request.
+     *
+     * Redirects are followed here rather than by the HTTP client, so every hop
+     * is checked against the allowlist before it is requested.
      */
     public function handle(array $arguments): string
     {
         $data = Validator::make($arguments, [
-            'url' => ['bail', 'required', 'url:http,https', function (string $attribute, mixed $value, Closure $fail) {
+            'url' => ['bail', 'required', 'url:http,https', function (string $attribute, mixed $value, Closure $fail): void {
                 if (! $this->isAllowed($value)) {
                     $fail('The :attribute host is not in the allowed target list.');
                 }
@@ -72,7 +75,6 @@ class CheckSecurityHeadersTool implements Tool
         $url = $data['url'];
         $redirects = [];
 
-        // Follow redirects ourselves so every hop is checked against the allowlist.
         for ($hop = 0; ; $hop++) {
             try {
                 $response = $this->fetch($url);
@@ -129,10 +131,12 @@ class CheckSecurityHeadersTool implements Tool
 
     /**
      * Turn a (possibly relative) Location header into an absolute URL.
+     *
+     * A Location that already has a scheme is returned as-is, whatever the
+     * scheme; isAllowed() is what rejects non-http(s) targets.
      */
     private function resolve(string $base, string $location): string
     {
-        // Already absolute (any scheme; isAllowed() rejects non-http ones).
         if (preg_match('#^[a-z][a-z0-9+.-]*:#i', $location)) {
             return $location;
         }
