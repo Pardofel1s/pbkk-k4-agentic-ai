@@ -60,7 +60,7 @@ Tema sementara: **Dynamic Application Security Testing (DAST)** — masih bisa b
 - **Tidak boleh commit langsung ke `main`** (diproteksi). Semua lewat Pull Request.
 - Nama branch: `<tipe>/<area>-<deskripsi>`, contoh `feat/be1-chat-models`, `feat/fe-chat-ui`, `fix/be2-tool-injection`.
 - Commit pakai [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `test:`, `docs:`, `chore:`.
-- PR butuh **1 approval** dari anggota lain + **CI hijau** (Pint + Pest). Merge pakai **squash**, jadi `git log` di `main` = daftar kontribusi per orang (dinilai di UAS).
+- PR wajib **CI hijau** (`tests`: Pint + Pest) dan **semua checklist "Cek sebelum merge" dicentang** (`checklist`). Approval tidak wajib — boleh merge PR sendiri, tapi minta review kalau menyentuh area orang lain. Merge pakai **squash**, jadi `git log` di `main` = daftar kontribusi per orang (dinilai di UAS).
 
 ```bash
 git switch main && git pull

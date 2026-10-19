@@ -1,4 +1,4 @@
-# Pemilik area wajib me-review PR yang menyentuh areanya.
+# Pemilik area otomatis diminta review kalau areanya disentuh (approval tidak wajib).
 # FE: shzirley | BE-1 (Data & Security): Pardofel1s | BE-2 (AI & Tools): build-zaidana
 
 *                                          @Pardofel1s
