@@ -1,6 +1,9 @@
 <?php
 
+use App\Models\Target;
+use App\Models\User;
 use App\Tools\Tool;
+use App\Tools\ToolContext;
 use App\Tools\ToolRegistry;
 
 function fakeTool(): Tool
@@ -21,7 +24,7 @@ function fakeTool(): Tool
             return ['type' => 'object', 'properties' => ['text' => ['type' => 'string']], 'required' => ['text']];
         }
 
-        public function handle(array $arguments): string
+        public function handle(array $arguments, ToolContext $context): string
         {
             return $arguments['text'];
         }
@@ -38,7 +41,9 @@ it('exposes tools in the OpenAI tools format', function () {
 });
 
 it('runs a registered tool by name', function () {
-    expect((new ToolRegistry([fakeTool()]))->get('echo')->handle(['text' => 'hi']))->toBe('hi');
+    $context = new ToolContext(new User(), new Target());
+
+    expect((new ToolRegistry([fakeTool()]))->get('echo')->handle(['text' => 'hi'], $context))->toBe('hi');
 });
 
 it('rejects tools that are not registered', function () {

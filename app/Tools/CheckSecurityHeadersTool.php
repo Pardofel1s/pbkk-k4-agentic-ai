@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Validator;
 /**
  * First DAST tool: fetch a target URL and report which common HTTP security
  * headers are present or missing. Read-only (GET only) and limited to the
- * hosts in config('llm.allowed_hosts'), so it only touches targets we are
- * allowed to test.
+ * target's scope ({@see ToolContext::allowsUrl()}), so it only touches hosts we
+ * are allowed to test.
  */
 class CheckSecurityHeadersTool implements Tool
 {
@@ -60,14 +60,14 @@ class CheckSecurityHeadersTool implements Tool
      * Arguments come straight from the LLM, so validate before making a request.
      *
      * Redirects are followed here rather than by the HTTP client, so every hop
-     * is checked against the allowlist before it is requested.
+     * is checked against the target's scope before it is requested.
      */
-    public function handle(array $arguments): string
+    public function handle(array $arguments, ToolContext $context): string
     {
         $data = Validator::make($arguments, [
-            'url' => ['bail', 'required', 'url:http,https', function (string $attribute, mixed $value, Closure $fail): void {
-                if (! $this->isAllowed($value)) {
-                    $fail('The :attribute host is not in the allowed target list.');
+            'url' => ['bail', 'required', 'url:http,https', function (string $attribute, mixed $value, Closure $fail) use ($context): void {
+                if (! is_string($value) || ! $context->allowsUrl($value)) {
+                    $fail('The :attribute is outside the scope of this target.');
                 }
             }],
         ])->validate();
@@ -94,8 +94,8 @@ class CheckSecurityHeadersTool implements Tool
 
             $next = $this->resolve($url, $location);
 
-            if (! $this->isAllowed($next)) {
-                return "{$url} redirects to {$next}, which is not in the allowed target list, so it was not requested.";
+            if (! $context->allowsUrl($next)) {
+                return "{$url} redirects to {$next}, which is outside the scope of this target, so it was not requested.";
             }
 
             $redirects[] = "{$url} -> {$next}";
@@ -114,26 +114,10 @@ class CheckSecurityHeadersTool implements Tool
     }
 
     /**
-     * Only http(s) URLs whose host is in config('llm.allowed_hosts').
-     */
-    private function isAllowed(mixed $url): bool
-    {
-        if (! is_string($url)) {
-            return false;
-        }
-
-        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-        $host = strtolower(trim((string) parse_url($url, PHP_URL_HOST), '[]'));
-        $allowed = array_map('strtolower', config('llm.allowed_hosts', []));
-
-        return in_array($scheme, ['http', 'https'], true) && in_array($host, $allowed, true);
-    }
-
-    /**
      * Turn a (possibly relative) Location header into an absolute URL.
      *
      * A Location that already has a scheme is returned as-is, whatever the
-     * scheme; isAllowed() is what rejects non-http(s) targets.
+     * scheme; the scope check is what rejects non-http(s) targets.
      */
     private function resolve(string $base, string $location): string
     {

@@ -12,6 +12,12 @@ return [
     'timeout' => (int) env('LLM_TIMEOUT', 120),
 
     /*
+    | Maximum LLM calls in one agent turn (each may run several tools), so a
+    | model that keeps calling tools cannot loop forever.
+    */
+    'max_steps' => (int) env('LLM_MAX_STEPS', 5),
+
+    /*
     | Tool classes (implementing App\Tools\Tool) exposed to the agent.
     */
     'tools' => [
