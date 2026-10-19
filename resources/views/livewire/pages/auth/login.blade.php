@@ -25,6 +25,9 @@ new #[Layout('layouts.guest')] class extends Component
 }; ?>
 
 <div>
+    <p class="eyebrow mb-3">Akses workspace</p>
+    <h1 class="text-3xl font-semibold tracking-tight">Selamat datang kembali.</h1>
+    <p class="mt-3 mb-8 text-sm muted">Masuk untuk melanjutkan jejak pengujian Anda.</p>
     <!-- Session Status -->
     <x-auth-session-status class="mb-4" :status="session('status')" />
 
@@ -52,20 +55,21 @@ new #[Layout('layouts.guest')] class extends Component
         <div class="block mt-4">
             <label for="remember" class="inline-flex items-center">
                 <input wire:model="form.remember" id="remember" type="checkbox" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" name="remember">
-                <span class="ms-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
+                <span class="ms-2 text-sm muted">Ingat saya</span>
             </label>
         </div>
 
-        <div class="flex items-center justify-end mt-4">
+        <div class="flex flex-wrap items-center justify-between gap-4 mt-6">
             @if (Route::has('password.request'))
                 <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('password.request') }}" wire:navigate>
-                    {{ __('Forgot your password?') }}
+                    Lupa password?
                 </a>
             @endif
 
             <x-primary-button class="ms-3">
-                {{ __('Log in') }}
+                Masuk <x-jejaksa.icon name="arrow" size="16" />
             </x-primary-button>
         </div>
     </form>
+    @if(Route::has('register'))<p class="mt-7 text-sm muted">Belum memiliki akun? <a href="{{ route('register') }}" class="text-link" wire:navigate>Daftar workspace</a></p>@endif
 </div>
