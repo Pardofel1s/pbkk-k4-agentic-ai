@@ -2,17 +2,20 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\PrunesOrphanComments;
 use Database\Factories\ReportFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 #[Fillable(['versi', 'format', 'file_path', 'generated_at'])]
 class Report extends Model
 {
     /** @use HasFactory<ReportFactory> */
     use HasFactory;
+    use PrunesOrphanComments;
 
     /**
      * Get the attributes that should be cast.
@@ -33,5 +36,12 @@ class Report extends Model
     public function scan(): BelongsTo
     {
         return $this->belongsTo(Scan::class);
+    }
+    /**
+     * @return MorphMany<Comment, $this>
+     */
+    public function comments(): MorphMany
+    {
+        return $this->morphMany(Comment::class, 'commentable');
     }
 }

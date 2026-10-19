@@ -2,21 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\ChatSession;
 use Illuminate\View\View;
 
 class ChatSessionController extends Controller
 {
     /**
      * Chat history: every message with its tool calls in a fixed number of queries.
+     * Access is checked by the route's can:view middleware (ChatSessionPolicy).
      */
-    public function show(Request $request, int $chatSession): View
+    public function show(ChatSession $chatSession): View
     {
-        // Scoped to the owner, so another user's session id is a 404 (no IDOR).
-        $session = $request->user()->chatSessions()
-            ->with(['chatMessages.toolCalls.tool', 'chatMessages.toolCalls.loggable'])
-            ->findOrFail($chatSession);
+        $chatSession->load(['chatMessages.toolCalls.tool', 'chatMessages.toolCalls.loggable']);
 
-        return view('chat-sessions.show', ['session' => $session]);
+        return view('chat-sessions.show', ['session' => $chatSession]);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\PrunesOrphanComments;
 use Database\Factories\FindingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -14,6 +15,7 @@ class Finding extends Model
 {
     /** @use HasFactory<FindingFactory> */
     use HasFactory;
+    use PrunesOrphanComments;
 
     /**
      * @return BelongsTo<Scan, $this>
@@ -37,5 +39,12 @@ class Finding extends Model
     public function toolCalls(): MorphMany
     {
         return $this->morphMany(ToolCall::class, 'loggable');
+    }
+    /**
+     * @return MorphMany<Comment, $this>
+     */
+    public function comments(): MorphMany
+    {
+        return $this->morphMany(Comment::class, 'commentable');
     }
 }

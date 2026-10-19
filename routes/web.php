@@ -13,9 +13,10 @@ Route::view('profile', 'profile')
     ->middleware(['auth'])
     ->name('profile');
 
+// Authorization pattern for every route: auth + can:<ability>,<route model> (policies in app/Policies).
 Route::get('chat-sessions/{chatSession}', [ChatSessionController::class, 'show'])
     ->whereNumber('chatSession')
-    ->middleware(['auth'])
+    ->middleware(['auth', 'can:view,chatSession'])
     ->name('chat-sessions.show');
 
 require __DIR__.'/auth.php';
