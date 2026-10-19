@@ -15,7 +15,7 @@ return [
     | Tool classes (implementing App\Tools\Tool) exposed to the agent.
     */
     'tools' => [
-        //
+        App\Tools\CheckSecurityHeadersTool::class,
     ],
 
 ];
