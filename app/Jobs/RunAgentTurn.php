@@ -11,6 +11,7 @@ use App\Services\Agent\StartAgentTurn;
 use App\Tools\ToolContext;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\Cache;
 use Throwable;
 
 /**
@@ -18,7 +19,8 @@ use Throwable;
  *
  * Not retried ($tries = 1): LLM and tool calls are not idempotent, and a retry
  * would run every tool again. Keep the queue's retry_after above $timeout
- * (DB_QUEUE_RETRY_AFTER in .env), or a second worker picks up a running job.
+ * (DB_QUEUE_RETRY_AFTER in .env), or a second worker picks up a running job,
+ * and config('llm.turn_timeout') below it, so the turn ends on its own.
  */
 class RunAgentTurn implements ShouldQueue
 {
@@ -33,14 +35,25 @@ class RunAgentTurn implements ShouldQueue
         public int $userId,
         public int $targetId,
         public ?int $scanId = null,
+        public ?string $lockOwner = null,
     ) {
     }
 
     /**
      * Permissions and the target's status are checked again here, because
-     * they may have changed since the turn was queued.
+     * they may have changed since the turn was queued. However the turn ends,
+     * the session's lock (taken by StartAgentTurn) is released.
      */
     public function handle(AgentLoop $loop, StartAgentTurn $gate): void
+    {
+        try {
+            $this->runTurn($loop, $gate);
+        } finally {
+            $this->releaseLock();
+        }
+    }
+
+    private function runTurn(AgentLoop $loop, StartAgentTurn $gate): void
     {
         $session = ChatSession::query()->find($this->chatSessionId);
 
@@ -65,7 +78,8 @@ class RunAgentTurn implements ShouldQueue
     }
 
     /**
-     * Leave a message in the chat so the UI does not wait forever.
+     * Leave a message in the chat so the UI does not wait forever, and free
+     * the session (handle()'s finally does not run when a worker is killed).
      */
     public function failed(?Throwable $exception): void
     {
@@ -73,5 +87,14 @@ class RunAgentTurn implements ShouldQueue
             'role' => 'assistant',
             'isi' => 'Maaf, agent gagal menyelesaikan permintaan ini. Coba lagi beberapa saat lagi.',
         ]);
+
+        $this->releaseLock();
+    }
+
+    private function releaseLock(): void
+    {
+        if ($this->lockOwner !== null) {
+            Cache::restoreLock(StartAgentTurn::lockName($this->chatSessionId), $this->lockOwner)->release();
+        }
     }
 }

@@ -11,6 +11,8 @@ use Illuminate\Support\Str;
  *
  * A URL is in scope only when all of these hold (docs/rbac.md, team rules):
  * - the scheme is http or https;
+ * - the port is the target's base_url port (80/443 when none is written), so a
+ *   target on localhost:8080 cannot reach other services on localhost;
  * - the host is in config('llm.allowed_hosts') (hosts we own or may test);
  * - the host is the target's own base_url host or matches an `include` rule;
  * - the host matches no `exclude` rule (exclude always wins).
@@ -23,6 +25,10 @@ class TargetScope
         $host = $this->host($url);
 
         if (! in_array($scheme, ['http', 'https'], true) || $host === '') {
+            return false;
+        }
+
+        if ($this->port($url) !== $this->port($target->base_url)) {
             return false;
         }
 
@@ -46,6 +52,21 @@ class TargetScope
     private function host(string $url): string
     {
         return strtolower(trim((string) parse_url($url, PHP_URL_HOST), '[]'));
+    }
+
+    /**
+     * The port a request to this URL really uses: the written one, else the
+     * scheme's default (443 for https, 80 otherwise).
+     */
+    private function port(string $url): int
+    {
+        $port = parse_url($url, PHP_URL_PORT);
+
+        if (is_int($port)) {
+            return $port;
+        }
+
+        return strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80;
     }
 
     /**

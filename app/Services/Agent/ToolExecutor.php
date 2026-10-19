@@ -27,6 +27,12 @@ class ToolExecutor
 
     public const FAILED = 'failed';
 
+    /**
+     * Longest a tool may run (see Tool::handle()); the agent loop only starts
+     * a tool when this much of the turn's time budget is left.
+     */
+    public const MAX_SECONDS = 120;
+
     public function __construct(private readonly ToolRegistry $tools)
     {
     }

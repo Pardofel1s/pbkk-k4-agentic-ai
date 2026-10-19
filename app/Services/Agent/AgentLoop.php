@@ -12,6 +12,11 @@ use App\Tools\ToolContext;
  * send the results back, and repeat until it answers in plain text or the
  * step limit (config('llm.max_steps')) is reached.
  *
+ * A turn also has a time budget (config('llm.turn_timeout')): an LLM call only
+ * starts when a whole LLM timeout still fits, and a tool only when
+ * ToolExecutor::MAX_SECONDS still fits, so the turn ends before its deadline
+ * and well inside the queued job's timeout.
+ *
  * Every assistant step is saved as a ChatMessage; the tool calls of a step
  * hang off that message in `tool_calls`. Earlier turns are replayed to the
  * LLM as text only; tool messages exist just for the turn being run.
@@ -40,8 +45,14 @@ class AgentLoop
         ];
 
         $maxSteps = max(1, (int) config('llm.max_steps', 5));
+        $budget = (int) config('llm.turn_timeout', 420);
+        $deadline = now()->getTimestamp() + $budget;
 
         for ($step = 0; $step < $maxSteps; $step++) {
+            if ($this->secondsLeft($deadline) < (int) config('llm.timeout', 120)) {
+                return $this->say($session, "Batas waktu {$budget} detik tercapai sebelum agent selesai. Coba persempit permintaannya.");
+            }
+
             $reply = $this->llm->chat($messages);
 
             if (! $reply->hasToolCalls()) {
@@ -55,12 +66,19 @@ class AgentLoop
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => $call->id,
-                    'content' => $this->executor->execute($call, $parent, $context),
+                    'content' => $this->secondsLeft($deadline) < ToolExecutor::MAX_SECONDS
+                        ? 'Error: no time left in this turn to run the tool.'
+                        : $this->executor->execute($call, $parent, $context),
                 ];
             }
         }
 
         return $this->say($session, "Batas {$maxSteps} langkah tercapai sebelum agent selesai. Coba persempit permintaannya.");
+    }
+
+    private function secondsLeft(int $deadline): int
+    {
+        return $deadline - now()->getTimestamp();
     }
 
     private function say(ChatSession $session, string $text): ChatMessage
