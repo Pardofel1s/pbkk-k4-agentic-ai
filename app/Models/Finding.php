@@ -17,6 +17,10 @@ class Finding extends Model
     use HasFactory;
     use PrunesOrphanComments;
 
+    public const OPEN = 'open';
+
+    public const FIXED = 'fixed';
+
     /**
      * @return BelongsTo<Scan, $this>
      */

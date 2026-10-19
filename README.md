@@ -140,7 +140,6 @@ Rubrik UAS: demo **wajib** dari binary NativePHP (bukan browser), prompt → fun
 ## Pertanyaan terbuka
 
 - Aplikasi target dummy untuk demo (mis. app fintech sederhana yang kita buat sendiri, dijalankan lokal).
-- Syarat menerbitkan sertifikat (mis. re-test tanpa finding `open`).
 
 ## RBAC
 

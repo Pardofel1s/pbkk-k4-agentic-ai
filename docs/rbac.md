@@ -135,6 +135,7 @@ $this->authorize('create', [Comment::class, $finding]);
 // Aksi yang punya aturan khusus: panggil action class (validasi + otorisasi sudah di dalam)
 app(CreateTarget::class)->handle(auth()->user(), $this->only(['nama', 'base_url', 'lingkungan']));
 app(VerifyTarget::class)->handle(auth()->user(), $target, Target::VERIFIED);
+app(IssueCertificate::class)->handle(auth()->user(), $retestScan); // ValidationException['scan'] kalau syarat belum terpenuhi
 app(RegisterAnalyst::class)->handle(auth()->user(), $this->only(['name', 'email', 'password', 'password_confirmation']));
 ```
 
@@ -145,6 +146,13 @@ app(RegisterAnalyst::class)->handle(auth()->user(), $this->only(['name', 'email'
 - Kepemilikan dicek lewat query (`User::ownsTarget()`, `User::ownsScan()`), jadi aman dipakai di dalam loop meski `preventLazyLoading()` aktif.
 - BE-2: sebelum agent menjalankan tool, cek `$user->can('create', [Scan::class, $target])` (analyst + target verified) di samping allowlist host.
 
-## Belum diputuskan (bukan RBAC)
+## Sertifikat
 
-- Syarat menerbitkan sertifikat (mis. re-test tanpa finding `open`).
+`IssueCertificate` (admin, `certificates.issue`) hanya menerbitkan sertifikat kalau:
+
+1. scan adalah **re-test** (`retest_of_id` terisi),
+2. statusnya `completed` (`Scan::COMPLETED`),
+3. **tidak ada finding `open`** di scan re-test itu (finding di scan awal tidak dihitung),
+4. scan itu belum punya sertifikat (satu sertifikat per scan).
+
+Nomor: `CERT-<tahun>-<id scan 5 digit>`, berlaku 1 tahun (`due_date`). Pemilik target bisa melihatnya lewat `CertificatePolicy`.
