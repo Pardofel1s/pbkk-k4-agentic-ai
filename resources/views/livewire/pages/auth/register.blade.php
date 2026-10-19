@@ -28,7 +28,8 @@ new #[Layout('layouts.guest')] class extends Component
 
         $validated['password'] = Hash::make($validated['password']);
 
-        event(new Registered($user = User::create($validated)));
+        // Public registration only ever creates clients (docs/rbac.md).
+        event(new Registered($user = User::create($validated)->assignRole('client')));
 
         Auth::login($user);
 

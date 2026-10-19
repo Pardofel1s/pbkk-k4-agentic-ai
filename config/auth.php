@@ -114,4 +114,20 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Seeded Admin
+    |--------------------------------------------------------------------------
+    |
+    | The only admin account is created by RolesAndAdminSeeder (also run when
+    | the NativePHP app boots). There is intentionally no default password.
+    |
+    */
+
+    'admin' => [
+        'name' => env('ADMIN_NAME', 'Administrator'),
+        'email' => env('ADMIN_EMAIL', 'admin@example.com'),
+        'password' => env('ADMIN_PASSWORD'),
+    ],
+
 ];
