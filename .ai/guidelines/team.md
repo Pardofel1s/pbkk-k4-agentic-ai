@@ -1,6 +1,6 @@
 # PBKK Kelompok 4 - Team Rules
 
-- Before starting a task, read `README.md` (roles, area ownership, task checklist, ERD) and `docs/rancangan.md` (DAST case study). Ask the user which role they have if it is unclear.
+- Before starting a task, read `README.md` (roles, area ownership, task checklist, ERD), `docs/rancangan.md` (DAST case study) and `docs/rbac.md` (roles, permissions, policies — check permissions, never role names). Ask the user which role they have if it is unclear.
 - Security tools must only reach hosts on the allowlist (`config('llm.allowed_hosts')`) and the target's `target_scope_rules`. Never point tools at third-party systems; demos run against our own local dummy target.
 - Stack is fixed by the course: Laravel 13, Breeze (Livewire/Volt class API), Livewire 3, SQLite + Eloquent, Spatie Permission, NativePHP Desktop, Pest. Do not swap or add frameworks.
 - Code style is PSR-12 (`vendor/bin/pint`). Code and identifiers in English; README and PR text may be Indonesian.

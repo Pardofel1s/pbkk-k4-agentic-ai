@@ -130,7 +130,8 @@ Kontrak yang sudah disediakan:
 |---|---|
 | Chat Livewire berfungsi, loading state / polling | FE |
 | `php artisan native:build win` → `.exe` jalan di laptop lain | FE |
-| CRUD lengkap, RBAC Spatie (`HasRoles`, middleware `role:`/`permission:`), API Sanctum | BE-1 |
+| RBAC Spatie sesuai [`docs/rbac.md`](docs/rbac.md) (seeder, Policy, action class), tabel `comments`, CRUD lengkap, API Sanctum | BE-1 |
+| Halaman per role sesuai [`docs/rbac.md`](docs/rbac.md): target, verifikasi, kelola user, detail scan/finding/report + komentar | FE |
 | Agent loop otonom, tools sesuai tema, mitigasi command injection, eksekusi via Queue | BE-2 |
 | Minimal 5 skenario test lulus | Semua |
 
@@ -139,7 +140,11 @@ Rubrik UAS: demo **wajib** dari binary NativePHP (bukan browser), prompt → fun
 ## Pertanyaan terbuka
 
 - Aplikasi target dummy untuk demo (mis. app fintech sederhana yang kita buat sendiri, dijalankan lokal).
-- Daftar role & permission RBAC (BE-1).
+- Syarat menerbitkan sertifikat (mis. re-test tanpa finding `open`).
+
+## RBAC
+
+Role `admin` (seed saja), `analyst` (didaftarkan admin), `client` (register publik). Alur: client daftar target → admin verifikasi → analyst scan. Kode mengecek **permission**, kepemilikan dicek **Policy**. Detail lengkap, matriks permission, dan pembagian tugas: [`docs/rbac.md`](docs/rbac.md).
 
 ## AI coding assistant
 
@@ -151,6 +156,8 @@ Repo ini sudah berisi guideline & skill resmi Laravel ([Laravel Boost](https://l
 ## ERD
 
 Model inti Week 9: `User` → `ChatSession` → `ChatMessage` → `ToolCall` (= *ToolExecutionLog* di slide). Sisanya domain DAST.
+
+> Direncanakan (belum ada migration): tabel `comments` polymorphic (`Finding` / `Report`) — lihat [`docs/rbac.md`](docs/rbac.md).
 
 ```mermaid
 erDiagram
