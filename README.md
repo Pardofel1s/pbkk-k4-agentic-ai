@@ -2,7 +2,18 @@
 
 Final project PBKK (Pemrograman Berbasis Kerangka Kerja) TC ITS. Aplikasi asisten AI yang bisa memanggil *tools* secara otonom, dikemas sebagai aplikasi desktop dengan NativePHP.
 
-Tema sementara: **Dynamic Application Security Testing (DAST)** — masih bisa berubah, jadi nama repo dan kerangka sengaja netral.
+## Tema: Dynamic Application Security Testing (DAST)
+
+Kami berperan sebagai vendor DAST pihak ketiga untuk portal web fintech hipotetis **PT XXX** (studi kasus lengkap: [`docs/rancangan.md`](docs/rancangan.md)). Layanan dibagi menjadi 4 pilar:
+
+1. **Vulnerability Assessment (VA)** — pemindaian otomatis untuk memetakan aset, versi perangkat lunak rentan (CVE), port terbuka, dan miskonfigurasi.
+2. **Penetration Testing (PT)** — analisis lanjutan atas temuan VA, termasuk celah logika bisnis.
+3. **Runtime Testing** — pengujian aplikasi yang sedang berjalan dari sisi pengguna akhir (XSS, SQLi, CSRF, dll.).
+4. **Code Review** — SAST + tinjauan manual untuk kredensial hardcoded dan cacat arsitektur.
+
+Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah re-test lulus (`certificates`) — lihat [ERD](#erd).
+
+> **Batasan etis:** tool hanya boleh diarahkan ke target yang kita miliki atau punya izin tertulis (allowlist `LLM_TOOL_ALLOWED_HOSTS` + `target_scope_rules`). Untuk demo pakai aplikasi target dummy di lingkungan lokal, bukan sistem orang lain.
 
 ## Stack
 
@@ -43,7 +54,7 @@ Tema sementara: **Dynamic Application Security Testing (DAST)** — masih bisa b
    ```
 
    `setup` meng-copy `.env`, generate key, migrate SQLite, dan build asset.
-4. Isi `LLM_API_KEY` di `.env` (minta ke grup, **jangan di-commit**). Mau pakai Ollama lokal? Ganti `LLM_BASE_URL=http://localhost:11434/v1` dan kosongkan key.
+4. Isi `LLM_API_KEY` di `.env` — **tanya langsung ke Kamal ([@Pardofel1s](https://github.com/Pardofel1s))** lewat chat pribadi. Jangan di-commit dan jangan ditempel di grup/issue/PR. Mau pakai Ollama lokal? Ganti `LLM_BASE_URL=http://localhost:11434/v1` dan kosongkan key.
 5. Jalankan:
 
    | Perintah | Untuk |
@@ -107,9 +118,9 @@ Kontrak yang sudah disediakan:
 - [ ] Test Livewire untuk halaman chat
 
 **BE-2 — @build-zaidana**
-- [ ] Service client LLM (`app/Services/Llm`) memanggil `{LLM_BASE_URL}/chat/completions` dengan `tools` dari `ToolRegistry`
-- [ ] Test client LLM pakai `Http::fake()` (respons biasa + respons `tool_calls`)
-- [ ] Rancang tool pertama sesuai tema (implements `Tool`, validasi argumen, Symfony Process bila perlu)
+- [x] Service client LLM (`app/Services/Llm`) memanggil `{LLM_BASE_URL}/chat/completions` dengan `tools` dari `ToolRegistry`
+- [x] Test client LLM pakai `Http::fake()` (respons biasa + respons `tool_calls`)
+- [x] Tool pertama sesuai tema: `CheckSecurityHeadersTool` (dengan allowlist host)
 
 **Bersama:** slide pitch maks. 5 halaman / 5 menit.
 
@@ -127,9 +138,8 @@ Rubrik UAS: demo **wajib** dari binary NativePHP (bukan browser), prompt → fun
 
 ## Pertanyaan terbuka
 
-- Tema final (DAST masih bisa berubah).
-- Aplikasi target untuk diuji saat demo (mis. app fintech dummy / OWASP Juice Shop lokal) — DAST tidak boleh diarahkan ke sistem orang lain tanpa izin.
-- Daftar role & permission RBAC.
+- Aplikasi target dummy untuk demo (mis. app fintech sederhana yang kita buat sendiri, dijalankan lokal).
+- Daftar role & permission RBAC (BE-1).
 
 ## AI coding assistant
 
