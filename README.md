@@ -157,6 +157,8 @@ Repo ini sudah berisi guideline & skill resmi Laravel ([Laravel Boost](https://l
 
 Model inti Week 9: `User` → `ChatSession` → `ChatMessage` → `ToolCall` (= *ToolExecutionLog* di slide). Sisanya domain DAST.
 
+Versi gambar untuk slide: [`docs/erd.png`](docs/erd.png) / [`docs/erd.svg`](docs/erd.svg) — dirender dari diagram Mermaid di bawah. Kalau skema berubah, ubah Mermaid-nya lalu render ulang: `npx @mermaid-js/mermaid-cli -i erd.mmd -o docs/erd.png -b white -s 3`.
+
 Akses (role, permission, policy) dijelaskan di [`docs/rbac.md`](docs/rbac.md); tabel Spatie (`roles`, `permissions`, `model_has_roles`, …) tidak digambar.
 
 ```mermaid
@@ -178,8 +180,10 @@ erDiagram
     scans ||--o{ reports : produces
     scans ||--o| certificates : earns
     users ||--o{ comments : writes
-    findings ||--o{ comments : "commentable (morph)"
-    reports ||--o{ comments : "commentable (morph)"
+    findings ||--o{ comments : commentable
+    reports ||--o{ comments : commentable
+    targets |o--o{ tool_calls : loggable
+    findings |o--o{ tool_calls : loggable
 
     users {
         bigint id PK
