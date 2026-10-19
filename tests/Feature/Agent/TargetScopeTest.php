@@ -12,7 +12,19 @@ beforeEach(function () {
 
 it('allows the target base host, case-insensitively', function () {
     expect($this->scope->allows($this->target, 'https://app.test/login'))->toBeTrue()
-        ->and($this->scope->allows($this->target, 'http://APP.test'))->toBeTrue();
+        ->and($this->scope->allows($this->target, 'https://APP.test'))->toBeTrue()
+        ->and($this->scope->allows($this->target, 'https://app.test:443/login'))->toBeTrue();
+});
+
+it('only allows the port of the target base url', function () {
+    config()->set('llm.allowed_hosts', ['localhost']);
+    $target = Target::factory()->create(['base_url' => 'http://localhost:8080']);
+
+    expect($this->scope->allows($target, 'http://localhost:8080/login'))->toBeTrue()
+        ->and($this->scope->allows($target, 'http://localhost:8000'))->toBeFalse()
+        ->and($this->scope->allows($target, 'http://localhost:3306'))->toBeFalse()
+        ->and($this->scope->allows($target, 'http://localhost'))->toBeFalse()
+        ->and($this->scope->allows($this->target, 'http://app.test'))->toBeFalse();
 });
 
 it('refuses non-http schemes', function () {

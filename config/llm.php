@@ -18,6 +18,13 @@ return [
     'max_steps' => (int) env('LLM_MAX_STEPS', 5),
 
     /*
+    | Seconds one agent turn may take in total. Keep it well below the queued
+    | job's timeout (RunAgentTurn::$timeout, 600) so the turn ends on its own
+    | instead of being killed mid-way.
+    */
+    'turn_timeout' => (int) env('LLM_TURN_TIMEOUT', 420),
+
+    /*
     | Tool classes (implementing App\Tools\Tool) exposed to the agent.
     */
     'tools' => [

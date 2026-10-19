@@ -196,3 +196,36 @@ it('stops after the configured number of steps', function () {
     expect($reply->isi)->toContain('Batas 2 langkah')
         ->and(ToolCallRecord::query()->count())->toBe(2);
 });
+
+it('does not start an LLM call when the turn budget cannot fit one', function () {
+    config()->set('llm.turn_timeout', 60);
+    config()->set('llm.timeout', 120);
+    Http::fake();
+
+    $reply = $this->loop->run($this->session, $this->context);
+
+    expect($reply->isi)->toContain('Batas waktu 60 detik');
+
+    Http::assertNothingSent();
+});
+
+it('skips tools and stops when the turn runs out of time', function () {
+    config()->set('llm.turn_timeout', 300);
+    config()->set('llm.timeout', 120);
+
+    Http::fake([
+        'llm.test/*' => function () {
+            $this->travel(250)->seconds();
+
+            return Http::response(llmToolCallReply('check_security_headers', ['url' => 'https://example.test']));
+        },
+        'example.test*' => Http::response('ok'),
+    ]);
+
+    $reply = $this->loop->run($this->session, $this->context);
+
+    expect($reply->isi)->toContain('Batas waktu 300 detik')
+        ->and(ToolCallRecord::query()->count())->toBe(0);
+
+    Http::assertSentCount(1);
+});

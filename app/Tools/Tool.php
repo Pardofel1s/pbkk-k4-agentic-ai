@@ -20,7 +20,8 @@ interface Tool
 
     /**
      * Arguments come straight from the LLM: validate them before use, and only
-     * reach URLs that $context->allowsUrl() accepts.
+     * reach URLs that $context->allowsUrl() accepts. Finish within
+     * ToolExecutor::MAX_SECONDS (120 s) in the worst case, timeouts included.
      *
      * @param  array<string, mixed>  $arguments
      */

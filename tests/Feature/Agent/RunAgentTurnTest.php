@@ -4,7 +4,10 @@ use App\Jobs\RunAgentTurn;
 use App\Models\ChatSession;
 use App\Models\Target;
 use App\Models\User;
+use App\Services\Agent\AgentLoop;
+use App\Services\Agent\StartAgentTurn;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     config()->set('llm.base_url', 'https://llm.test/v1');
@@ -43,4 +46,39 @@ it('leaves a message in the chat when the job fails', function () {
     expect($this->session->chatMessages()->latest('id')->first())
         ->role->toBe('assistant')
         ->isi->toContain('gagal');
+});
+
+describe('the session lock taken by StartAgentTurn', function () {
+    beforeEach(function () {
+        Queue::fake();
+        app(StartAgentTurn::class)->handle($this->analyst, $this->session, $this->target, 'Cek header');
+        $this->job = Queue::pushed(RunAgentTurn::class)->sole();
+    });
+
+    it('is released when the turn finishes', function () {
+        Http::fake(['llm.test/*' => Http::response([
+            'choices' => [['message' => ['role' => 'assistant', 'content' => 'Selesai.']]],
+        ])]);
+
+        expect(StartAgentTurn::isBusy($this->session))->toBeTrue();
+
+        $this->job->handle(app(AgentLoop::class), app(StartAgentTurn::class));
+
+        expect(StartAgentTurn::isBusy($this->session))->toBeFalse();
+    });
+
+    it('is released when the turn is refused', function () {
+        Http::fake();
+        $this->target->forceFill(['status_verifikasi' => Target::REJECTED])->save();
+
+        $this->job->handle(app(AgentLoop::class), app(StartAgentTurn::class));
+
+        expect(StartAgentTurn::isBusy($this->session))->toBeFalse();
+    });
+
+    it('is released when the job fails', function () {
+        $this->job->failed(new RuntimeException('Worker killed'));
+
+        expect(StartAgentTurn::isBusy($this->session))->toBeFalse();
+    });
 });
