@@ -19,9 +19,10 @@ interface Tool
     public function parameters(): array;
 
     /**
-     * Arguments come straight from the LLM: validate them before use.
+     * Arguments come straight from the LLM: validate them before use, and only
+     * reach URLs that $context->allowsUrl() accepts.
      *
      * @param  array<string, mixed>  $arguments
      */
-    public function handle(array $arguments): string;
+    public function handle(array $arguments, ToolContext $context): string;
 }

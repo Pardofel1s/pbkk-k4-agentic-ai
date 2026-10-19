@@ -2,6 +2,7 @@
 
 use App\Services\Llm\LlmClient;
 use App\Tools\Tool;
+use App\Tools\ToolContext;
 use App\Tools\ToolRegistry;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
@@ -29,7 +30,7 @@ beforeEach(function () {
             return ['type' => 'object', 'properties' => ['url' => ['type' => 'string']], 'required' => ['url']];
         }
 
-        public function handle(array $arguments): string
+        public function handle(array $arguments, ToolContext $context): string
         {
             return 'ok';
         }
