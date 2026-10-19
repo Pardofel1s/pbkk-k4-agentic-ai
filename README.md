@@ -93,12 +93,13 @@ Kontrak yang sudah disediakan:
 ## Tugas Week 9 (kumpul link repo di LMS H-1 Pertemuan 10)
 
 **BE-1 — @Pardofel1s**
-- [ ] Migration `chat_sessions`, `chat_messages`, `tool_execution_logs` dengan foreign key + `cascadeOnDelete()`
-- [ ] Model + relasi: User `hasMany` ChatSession → `hasMany` ChatMessage → `hasMany` ToolExecutionLog (dan `belongsTo` baliknya)
-- [ ] Factory + seeder data dummy relasional
-- [ ] Query riwayat chat dengan nested eager loading + screenshot Debugbar bebas N+1
-- [ ] (A+) `ToolExecutionLog` polymorphic: `morphs('loggable')`
-- [ ] ERD di bagian bawah README
+- [x] Migration semua tabel (inti + DAST) dengan foreign key + `cascadeOnDelete()`
+- [x] Model + relasi: User `hasMany` ChatSession → `hasMany` ChatMessage → `hasMany` ToolCall (dan `belongsTo` baliknya)
+- [x] Factory + seeder data dummy relasional
+- [x] Query riwayat chat dengan nested eager loading
+- [ ] Screenshot Debugbar bebas N+1 (untuk slide)
+- [x] (A+) `ToolCall` polymorphic: `nullableMorphs('loggable')`
+- [x] ERD di bagian bawah README
 
 **FE — @shzirley**
 - [ ] Halaman daftar chat session + halaman chat (Volt), awalnya pakai data dummy/factory
@@ -139,4 +140,141 @@ Repo ini sudah berisi guideline & skill resmi Laravel ([Laravel Boost](https://l
 
 ## ERD
 
-<!-- TODO BE-1: ERD (Mermaid erDiagram) untuk User, ChatSession, ChatMessage, ToolExecutionLog. -->
+Model inti Week 9: `User` → `ChatSession` → `ChatMessage` → `ToolCall` (= *ToolExecutionLog* di slide). Sisanya domain DAST.
+
+```mermaid
+erDiagram
+    users ||--o{ chat_sessions : has
+    users ||--o{ targets : owns
+    chat_sessions ||--o{ chat_messages : has
+    chat_messages ||--o{ tool_calls : triggers
+    tools ||--o{ tool_calls : "executed as"
+    scans |o--o{ tool_calls : "runs in"
+    targets ||--o{ target_scope_rules : has
+    targets ||--o{ target_test_accounts : has
+    targets ||--o{ scans : has
+    target_test_accounts |o--o{ scans : "logs in as"
+    scan_profiles ||--o{ scans : configures
+    scans |o--o{ scans : "retest of"
+    scans ||--o{ findings : finds
+    vulnerability_types ||--o{ findings : classifies
+    scans ||--o{ reports : produces
+    scans ||--o| certificates : earns
+
+    users {
+        bigint id PK
+        string name
+        string email UK
+        string password
+        timestamp email_verified_at
+    }
+    chat_sessions {
+        bigint id PK
+        bigint user_id FK
+        string judul "nullable"
+        string model_llm "nullable"
+    }
+    chat_messages {
+        bigint id PK
+        bigint chat_session_id FK
+        string role
+        text isi
+    }
+    tool_calls {
+        bigint id PK
+        bigint chat_message_id FK
+        bigint scan_id FK "nullable"
+        bigint tool_id FK
+        string loggable_type "nullable, polymorphic"
+        bigint loggable_id "nullable, polymorphic"
+        json parameter
+        json hasil "nullable"
+        string status
+        longtext error_msg "nullable"
+    }
+    tools {
+        bigint id PK
+        string nama UK "= Tool::name()"
+        text deskripsi
+        boolean status
+    }
+    targets {
+        bigint id PK
+        bigint user_id FK
+        string nama
+        string base_url
+        string lingkungan
+        string status_verifikasi
+    }
+    target_scope_rules {
+        bigint id PK
+        bigint target_id FK
+        string pola_domain
+        string tipe
+    }
+    target_test_accounts {
+        bigint id PK
+        bigint target_id FK
+        string label_role
+        string username
+        text encrypted_password "encrypted cast"
+    }
+    scan_profiles {
+        bigint id PK
+        string nama
+        string tipe
+        longtext deskripsi "nullable"
+        json pengaturan "nullable"
+    }
+    scans {
+        bigint id PK
+        bigint target_id FK
+        bigint target_test_account_id FK "nullable"
+        bigint scan_profile_id FK
+        bigint retest_of_id FK "nullable, self"
+        string status
+        tinyint progress
+        timestamp started_at "nullable"
+        timestamp finished_at "nullable"
+    }
+    vulnerability_types {
+        bigint id PK
+        string nama "nullable"
+        string kode_cwe
+        string kategori_owasp
+        longtext deskripsi
+        longtext rekomendasi
+    }
+    findings {
+        bigint id PK
+        bigint scan_id FK
+        bigint vulnerability_type_id FK
+        string severity
+        string url_terdampak
+        string parameter "nullable"
+        longtext proof "nullable"
+        longtext rekomendasi "nullable"
+        string status
+    }
+    reports {
+        bigint id PK
+        bigint scan_id FK
+        int versi
+        string format
+        string file_path
+        timestamp generated_at
+    }
+    certificates {
+        bigint id PK
+        bigint scan_id FK, UK
+        string nomor UK
+        timestamp issued_at
+        date due_date "nullable"
+    }
+```
+
+Semua tabel juga punya `created_at`/`updated_at`.
+
+- **Polymorphic (A+):** `tool_calls.loggable` = subjek yang dikenai tool, saat ini `Target` atau `Finding` (`morphMany('loggable')`). Tambah model lain cukup dengan relasi `morphMany` baru.
+- **onDelete:** relasi kepemilikan `cascade` (user → chat/target → scan → finding/report/certificate, message → tool call). Tabel lookup (`tools`, `scan_profiles`, `vulnerability_types`) `restrict`. `scan_id`, `target_test_account_id`, `retest_of_id` → `set null`.
+- **Bebas N+1:** `ChatSessionController@show` memuat `chatMessages.toolCalls.tool` + `chatMessages.toolCalls.loggable` sekaligus; `Model::preventLazyLoading()` aktif di luar production, dan `tests/Feature/Database/SchemaTest.php` memastikan jumlah query konstan. Screenshot Debugbar: `php artisan migrate:fresh --seed`, login `test@example.com` / `password`, buka `/chat-sessions/1`.
