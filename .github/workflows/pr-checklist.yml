@@ -1,0 +1,25 @@
+name: PR checklist
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  checklist:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every item under "## Cek sebelum merge" is ticked
+        env:
+          # Passed via env, never interpolated into the script (PR body is untrusted input).
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          section=$(printf '%s\n' "$BODY" | tr -d '\r' | sed -n '/^## Cek sebelum merge/,/^## /p')
+          if printf '%s\n' "$section" | grep -E '^\s*- \[ \]'; then
+            echo "::error::Masih ada checklist yang belum dicentang (lihat di atas)."
+            exit 1
+          fi
+          if ! printf '%s\n' "$section" | grep -qE '^\s*- \[[xX]\]'; then
+            echo "::error::Bagian '## Cek sebelum merge' tidak ada atau kosong. Pakai template PR."
+            exit 1
+          fi
+          echo "Checklist lengkap."

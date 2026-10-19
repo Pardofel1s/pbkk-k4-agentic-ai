@@ -8,9 +8,12 @@
 - [ ] BE-1 (Database / Model / Auth / RBAC)
 - [ ] BE-2 (LLM / Tools / Queue)
 
-## Cek sebelum minta review
+## Cek sebelum merge
+
+<!-- CI "checklist" gagal selama masih ada kotak kosong di bagian ini. Centang dengan jujur. -->
 
 - [ ] `composer test` lulus di lokal
 - [ ] `vendor/bin/pint` sudah dijalankan (PSR-12)
 - [ ] Tidak ada API key / `.env` yang ikut ter-commit
-- [ ] Screenshot (untuk perubahan UI) / bukti Debugbar (untuk query)
+- [ ] Screenshot (perubahan UI) / bukti Debugbar (query) sudah dilampirkan, atau tidak relevan
+- [ ] Diff sudah aku baca ulang sendiri sebelum merge
