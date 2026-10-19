@@ -101,7 +101,7 @@ comments: id, user_id (FK cascade), commentable_type, commentable_id, isi (text)
 - [ ] Navigasi per role (`@can`)
 
 **BE-2 (@build-zaidana)**
-- [ ] Agent loop & tool hanya jalan untuk user dengan `chat.use` / `scans.run`, dan hanya ke target `verified`
+- [x] Agent loop & tool hanya jalan untuk user dengan `chat.use` / `scans.run`, dan hanya ke target `verified`
 
 ## Cara pakai untuk FE / BE-2
 
