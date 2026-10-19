@@ -14,19 +14,16 @@ beforeEach(function () {
     config()->set('llm.model', 'qwen3:14b');
     config()->set('llm.api_key', 'secret-key');
     config()->set('llm.timeout', 30);
-});
 
-function echoTool(): Tool
-{
-    return new class () implements Tool {
+    $stubTool = new class () implements Tool {
         public function name(): string
         {
-            return 'check_security_headers';
+            return 'stub_tool';
         }
 
         public function description(): string
         {
-            return 'Check security headers of a URL.';
+            return 'Stub tool for request-shape tests.';
         }
 
         public function parameters(): array
@@ -39,12 +36,12 @@ function echoTool(): Tool
             return 'ok';
         }
     };
-}
 
-function clientWith(Tool ...$tools): LlmClient
-{
-    return new LlmClient(new ToolRegistry($tools));
-}
+    // Kept on the test case instead of global helpers, so names cannot clash
+    // with helpers in other Pest files.
+    $this->bareClient = new LlmClient(new ToolRegistry([]));
+    $this->toolClient = new LlmClient(new ToolRegistry([$stubTool]));
+});
 
 it('returns assistant text for a plain response', function () {
     Http::fake([
@@ -53,7 +50,7 @@ it('returns assistant text for a plain response', function () {
         ]),
     ]);
 
-    $response = clientWith()->chat([['role' => 'user', 'content' => 'hi']]);
+    $response = $this->bareClient->chat([['role' => 'user', 'content' => 'hi']]);
 
     expect($response->content)->toBe('Hello there.')
         ->and($response->hasToolCalls())->toBeFalse()
@@ -80,7 +77,7 @@ it('parses tool_calls from the response and decodes their arguments', function (
         ]),
     ]);
 
-    $response = clientWith(echoTool())->chat([['role' => 'user', 'content' => 'scan example.test']]);
+    $response = $this->toolClient->chat([['role' => 'user', 'content' => 'scan example.test']]);
 
     expect($response->hasToolCalls())->toBeTrue()
         ->and($response->toolCalls)->toHaveCount(1);
@@ -96,7 +93,7 @@ it('posts to /chat/completions with the model, tool schemas and bearer token', f
         'llm.test/*' => Http::response(['choices' => [['message' => ['content' => 'ok']]]]),
     ]);
 
-    clientWith(echoTool())->chat([['role' => 'user', 'content' => 'hi']]);
+    $this->toolClient->chat([['role' => 'user', 'content' => 'hi']]);
 
     Http::assertSent(function (Request $request) {
         $body = $request->data();
@@ -105,7 +102,7 @@ it('posts to /chat/completions with the model, tool schemas and bearer token', f
             && $request->hasHeader('Authorization', 'Bearer secret-key')
             && $body['model'] === 'qwen3:14b'
             && $body['tool_choice'] === 'auto'
-            && $body['tools'][0]['function']['name'] === 'check_security_headers';
+            && $body['tools'][0]['function']['name'] === 'stub_tool';
     });
 });
 
@@ -114,7 +111,7 @@ it('omits tools when none are registered', function () {
         'llm.test/*' => Http::response(['choices' => [['message' => ['content' => 'ok']]]]),
     ]);
 
-    clientWith()->chat([['role' => 'user', 'content' => 'hi']]);
+    $this->bareClient->chat([['role' => 'user', 'content' => 'hi']]);
 
     Http::assertSent(fn (Request $request) => ! array_key_exists('tools', $request->data()));
 });
@@ -124,7 +121,7 @@ it('can skip tools for a plain call even when some are registered', function () 
         'llm.test/*' => Http::response(['choices' => [['message' => ['content' => 'ok']]]]),
     ]);
 
-    clientWith(echoTool())->chat([['role' => 'user', 'content' => 'hi']], ['tools' => false]);
+    $this->toolClient->chat([['role' => 'user', 'content' => 'hi']], ['tools' => false]);
 
     Http::assertSent(fn (Request $request) => ! array_key_exists('tools', $request->data()));
 });
@@ -134,5 +131,5 @@ it('throws on an error response', function () {
         'llm.test/*' => Http::response(['error' => 'boom'], 500),
     ]);
 
-    clientWith()->chat([['role' => 'user', 'content' => 'hi']]);
+    $this->bareClient->chat([['role' => 'user', 'content' => 'hi']]);
 })->throws(RequestException::class);
