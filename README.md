@@ -1,6 +1,27 @@
-# PBKK Kelompok 4 — Agentic AI Desktop App
+# Jejaksa — PBKK Kelompok 4
 
 Final project PBKK (Pemrograman Berbasis Kerangka Kerja) TC ITS. Aplikasi asisten AI yang bisa memanggil *tools* secara otonom, dikemas sebagai aplikasi desktop dengan NativePHP.
+
+Produk: **Jejaksa — Setiap celah, jelas jejaknya.** Fokus pengujian keamanan web/DAST, dengan identitas Midnight–Teal dan logo J Trace.
+
+## Status frontend
+
+Frontend tahap **F0 (demo interaktif)** tersedia dalam stack Laravel/Blade/Livewire yang sama:
+
+- Landing publik dengan animasi cursor/edit berulang saat terlihat, transisi masuk/keluar, bottom bar ringkas, fallback statis, dan dukungan reduced motion. Tidak ada kontrol playback.
+- Auth/profil Breeze dengan tema Jejaksa; workspace responsif dan navigasi keyboard.
+- Tipografi Plus Jakarta Sans variable disertakan lokal melalui Vite; lisensi ada di `public/fonts/plus-jakarta-sans/OFL.txt`. Panduan visual khusus proyek tersedia di `.agents/skills/antislop/SKILL.md`.
+- Target/scope/metadata akun uji, profil pengujian, wizard empat tahap, status scan, pembatalan, kegagalan/retry, serta review/retest temuan.
+- Percakapan dengan rencana contoh yang harus disetujui, detail aktivitas tool, laporan HTML contoh dengan versi/snapshot, dan preview sertifikat yang belum dapat diterbitkan.
+- Katalog tool membedakan aktif dan siap; halaman akses serta pengaturan menunjukkan batas integrasi.
+
+Auth memakai database sebenarnya. Data domain demo disimpan dalam session, dipisahkan per pengguna, dan hilang ketika session diakhiri. Tidak ada scanner, proses shell, job pengujian, atau permintaan LLM yang dijalankan oleh demo. Password akun target tidak diminta atau disimpan. Model database, policy RBAC, action BE-1, client LLM, dan tool pertama dari `main` sudah tersedia. Workspace F0 masih memakai adapter session; koneksi UI ke data domain, izin per aksi, agent loop, PDF final, dan penerbitan sertifikat belum selesai.
+
+Setelah setup dan build, buka `/` atau jalankan `php artisan serve`. Jalankan migration dan seeder role sesuai petunjuk setup sebelum daftar melalui `/register`; pendaftaran publik membuat akun `client`. Akun dummy development tersedia hanya setelah `DatabaseSeeder` dijalankan. API key LLM tidak diperlukan untuk frontend demo.
+
+Titik implementasi: `resources/views/welcome.blade.php`, `resources/views/jejaksa/`, `resources/views/livewire/pages/workspace.blade.php`, dan adapter session `app/Livewire/DemoWorkspace.php`. Perilaku demo diuji pada `tests/Feature/JejaksaWorkspaceTest.php`.
+
+Window NativePHP dikonfigurasi menjadi **Jejaksa**, 1440×900 (minimum 1024×768), masuk ke route workspace/login. Pengujian binary Windows dan pemulihan job nyata masih diperlukan. Route baru tetap memerlukan review BE-1 sesuai CODEOWNERS.
 
 ## Tema: Dynamic Application Security Testing (DAST)
 
@@ -54,7 +75,7 @@ Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah
    ```
 
    `setup` meng-copy `.env`, generate key, migrate SQLite, dan build asset. Lalu isi `ADMIN_PASSWORD` di `.env` dan jalankan `php artisan db:seed` untuk role, admin, dan data dummy (login dev: `analyst@example.com` / `client@example.com`, password `password`).
-4. Isi `LLM_API_KEY` di `.env` — **tanya langsung ke Kamal ([@Pardofel1s](https://github.com/Pardofel1s))** lewat chat pribadi. Jangan di-commit dan jangan ditempel di grup/issue/PR. Mau pakai Ollama lokal? Ganti `LLM_BASE_URL=http://localhost:11434/v1` dan kosongkan key.
+4. Untuk integrasi LLM, isi `LLM_API_KEY` di `.env` — **tanya langsung ke Kamal ([@Pardofel1s](https://github.com/Pardofel1s))** lewat chat pribadi. Jangan di-commit dan jangan ditempel di grup/issue/PR. Mau pakai Ollama lokal? Ganti `LLM_BASE_URL=http://localhost:11434/v1` dan kosongkan key. Frontend demo tidak memerlukan API key LLM.
 5. Jalankan:
 
    | Perintah | Untuk |
@@ -83,7 +104,7 @@ gh pr create --fill
 
 ## Arsitektur
 
-Modular monolith: Laravel MVC + service layer + agent tool-calling.
+Modular monolith: Laravel MVC + service layer + agent tool-calling. Diagram berikut adalah arah integrasi backend; F0 memakai adapter demo tanpa menjalankan agent loop.
 
 ```
 Livewire (chat UI) ──> Agent loop (BE-2) ──> LLM /chat/completions (Senopati/Ollama)
@@ -113,9 +134,9 @@ Kontrak yang sudah disediakan:
 - [x] ERD di bagian bawah README
 
 **FE — @shzirley**
-- [ ] Halaman daftar chat session + halaman chat (Volt), awalnya pakai data dummy/factory
+- [x] Halaman daftar chat session + halaman chat (Volt), memakai data demo session
 - [ ] Coba `composer native:dev` jalan di laptop sendiri; set judul & ukuran window di `NativeAppServiceProvider`
-- [ ] Test Livewire untuk halaman chat
+- [x] Test Livewire untuk halaman chat dan persetujuan rencana demo
 
 **BE-2 — @build-zaidana**
 - [x] Service client LLM (`app/Services/Llm`) memanggil `{LLM_BASE_URL}/chat/completions` dengan `tools` dari `ToolRegistry`

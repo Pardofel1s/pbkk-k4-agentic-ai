@@ -18,7 +18,13 @@ class NativeAppServiceProvider implements ProvidesPhpIni
         // The built app migrates automatically but never seeds; roles + admin are required (docs/rbac.md).
         Artisan::call('db:seed', ['--class' => RolesAndAdminSeeder::class, '--force' => true]);
 
-        Window::open();
+        Window::open()
+            ->title('Jejaksa')
+            ->width(1440)
+            ->height(900)
+            ->minWidth(1024)
+            ->minHeight(768)
+            ->route('dashboard');
     }
 
     /**

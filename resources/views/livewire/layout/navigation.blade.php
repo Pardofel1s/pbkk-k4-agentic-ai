@@ -5,106 +5,33 @@ use Livewire\Volt\Component;
 
 new class extends Component
 {
-    /**
-     * Log the current user out of the application.
-     */
     public function logout(Logout $logout): void
     {
         $logout();
-
         $this->redirect('/', navigate: true);
     }
 }; ?>
 
-<nav x-data="{ open: false }" class="bg-white border-b border-gray-100">
-    <!-- Primary Navigation Menu -->
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex justify-between h-16">
-            <div class="flex">
-                <!-- Logo -->
-                <div class="shrink-0 flex items-center">
-                    <a href="{{ route('dashboard') }}" wire:navigate>
-                        <x-application-logo class="block h-9 w-auto fill-current text-gray-800" />
-                    </a>
-                </div>
-
-                <!-- Navigation Links -->
-                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
-                    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
-                        {{ __('Dashboard') }}
-                    </x-nav-link>
-                </div>
-            </div>
-
-            <!-- Settings Dropdown -->
-            <div class="hidden sm:flex sm:items-center sm:ms-6">
-                <x-dropdown align="right" width="48">
-                    <x-slot name="trigger">
-                        <button class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-gray-500 bg-white hover:text-gray-700 focus:outline-none transition ease-in-out duration-150">
-                            <div x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" x-on:profile-updated.window="name = $event.detail.name"></div>
-
-                            <div class="ms-1">
-                                <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                </svg>
-                            </div>
-                        </button>
-                    </x-slot>
-
-                    <x-slot name="content">
-                        <x-dropdown-link :href="route('profile')" wire:navigate>
-                            {{ __('Profile') }}
-                        </x-dropdown-link>
-
-                        <!-- Authentication -->
-                        <button wire:click="logout" class="w-full text-start">
-                            <x-dropdown-link>
-                                {{ __('Log Out') }}
-                            </x-dropdown-link>
-                        </button>
-                    </x-slot>
-                </x-dropdown>
-            </div>
-
-            <!-- Hamburger -->
-            <div class="-me-2 flex items-center sm:hidden">
-                <button @click="open = ! open" class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:bg-gray-100 focus:text-gray-500 transition duration-150 ease-in-out">
-                    <svg class="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
-                        <path :class="{'hidden': open, 'inline-flex': ! open }" class="inline-flex" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                        <path :class="{'hidden': ! open, 'inline-flex': open }" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Responsive Navigation Menu -->
-    <div :class="{'block': open, 'hidden': ! open}" class="hidden sm:hidden">
-        <div class="pt-2 pb-3 space-y-1">
-            <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')" wire:navigate>
-                {{ __('Dashboard') }}
-            </x-responsive-nav-link>
-        </div>
-
-        <!-- Responsive Settings Options -->
-        <div class="pt-4 pb-1 border-t border-gray-200">
-            <div class="px-4">
-                <div class="font-medium text-base text-gray-800" x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" x-on:profile-updated.window="name = $event.detail.name"></div>
-                <div class="font-medium text-sm text-gray-500">{{ auth()->user()->email }}</div>
-            </div>
-
-            <div class="mt-3 space-y-1">
-                <x-responsive-nav-link :href="route('profile')" wire:navigate>
-                    {{ __('Profile') }}
-                </x-responsive-nav-link>
-
-                <!-- Authentication -->
-                <button wire:click="logout" class="w-full text-start">
-                    <x-responsive-nav-link>
-                        {{ __('Log Out') }}
-                    </x-responsive-nav-link>
-                </button>
-            </div>
-        </div>
-    </div>
-</nav>
+<div>
+    <div x-cloak x-show="navigationOpen" class="fixed inset-0 z-30 bg-black/70 md:hidden" @click="navigationOpen = false; $nextTick(() => document.getElementById('open-workspace-navigation')?.focus())" aria-hidden="true"></div>
+    <aside id="workspace-navigation" class="sidebar" :inert="isMobile && !navigationOpen" :class="{ 'is-open': navigationOpen }" @keydown.tab="if (isMobile && navigationOpen) { const items = [...$el.querySelectorAll('a,button')].filter(el => el.offsetParent !== null); if ($event.shiftKey && document.activeElement === items[0]) { $event.preventDefault(); items.at(-1).focus(); } else if (!$event.shiftKey && document.activeElement === items.at(-1)) { $event.preventDefault(); items[0].focus(); } }">
+        <button id="close-workspace-navigation" type="button" class="icon-btn absolute right-2 top-2 md:hidden" @click="navigationOpen = false; $nextTick(() => document.getElementById('open-workspace-navigation')?.focus())" aria-label="Tutup navigasi"><x-jejaksa.icon name="close" /></button>
+        <a href="{{ route('home') }}" aria-label="Jejaksa beranda" wire:navigate><img class="brand-lockup" src="{{ asset('brand/jejaksa-logo-dark.svg') }}" alt="jejaksa" width="150" height="53"></a>
+        <div class="workspace-picker"><span class="flex h-8 w-8 items-center justify-center rounded-md border border-teal-700 bg-teal-950 text-teal-200"><x-jejaksa.icon name="shield" size="17" /></span><div><div class="text-xs font-semibold">Jejaksa Lab</div><div class="text-[10px] muted">Personal workspace · Demo</div></div></div>
+        <nav aria-label="Navigasi workspace" class="flex-1 overflow-y-auto">
+            @foreach([
+                'Workspace' => [['dashboard','grid','Ringkasan'],['targets.index','target','Target'],['scans.index','scan','Pemindaian'],['findings.index','shield','Temuan'],['chat.index','chat','Asisten AI']],
+                'Output' => [['reports.index','file','Laporan'],['certificates.index','award','Sertifikat']],
+                'Konfigurasi' => [['scan-profiles.index','settings','Profil scan'],['tools.index','tool','Katalog tool'],['vulnerability-types.index','code','Jenis kerentanan'],['users.index','users','Pengguna & akses']],
+            ] as $group => $items)
+                <p class="nav-group">{{ $group }}</p>
+                @foreach($items as [$route, $icon, $label])
+                    @php($active = request()->routeIs($route === 'dashboard' ? 'dashboard' : str_replace('.index', '.*', $route)))
+                    <a href="{{ route($route) }}" wire:navigate class="nav-item {{ $active ? 'active' : '' }}" @if($active) aria-current="page" @endif><x-jejaksa.icon :name="$icon" size="18" /><span>{{ $label }}</span></a>
+                @endforeach
+            @endforeach
+        </nav>
+        <div class="mt-4 border-t border-slate-800 pt-3"><a class="nav-item {{ request()->routeIs('settings', 'profile') ? 'active' : '' }}" href="{{ route('settings') }}" wire:navigate><x-jejaksa.icon name="settings" size="18" />Pengaturan</a><button type="button" wire:click="logout" class="nav-item w-full"><x-jejaksa.icon name="logout" size="18" />Keluar</button></div>
+        <div class="mt-3 flex items-center gap-3 border-t border-slate-800 px-3 pt-4"><span class="avatar">{{ mb_strtoupper(mb_substr(auth()->user()->name, 0, 2)) }}</span><div class="min-w-0"><p class="truncate text-xs font-medium" x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" @profile-updated.window="name = $event.detail.name"></p><p class="truncate text-[10px] muted">{{ auth()->user()->email }}</p></div></div>
+    </aside>
+</div>
