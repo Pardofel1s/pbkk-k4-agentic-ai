@@ -30,6 +30,10 @@ new class extends Component
                     <a href="{{ route($route) }}" wire:navigate class="nav-item {{ $active ? 'active' : '' }}" @if($active) aria-current="page" @endif><x-jejaksa.icon :name="$icon" size="18" /><span>{{ $label }}</span></a>
                 @endforeach
             @endforeach
+            @can('create', App\Models\ChatSession::class)
+                <p class="nav-group">Live</p>
+                <a href="{{ route('agent.chat') }}" wire:navigate class="nav-item {{ request()->routeIs('agent.chat') ? 'active' : '' }}" @if(request()->routeIs('agent.chat')) aria-current="page" @endif><x-jejaksa.icon name="sparkles" size="18" /><span>Asisten AI · Live</span></a>
+            @endcan
         </nav>
         <div class="mt-4 border-t border-slate-800 pt-3"><a class="nav-item {{ request()->routeIs('settings', 'profile') ? 'active' : '' }}" href="{{ route('settings') }}" wire:navigate><x-jejaksa.icon name="settings" size="18" />Pengaturan</a><button type="button" wire:click="logout" class="nav-item w-full"><x-jejaksa.icon name="logout" size="18" />Keluar</button></div>
         <div class="mt-3 flex items-center gap-3 border-t border-slate-800 px-3 pt-4"><span class="avatar">{{ mb_strtoupper(mb_substr(auth()->user()->name, 0, 2)) }}</span><div class="min-w-0"><p class="truncate text-xs font-medium" x-data="{{ json_encode(['name' => auth()->user()->name]) }}" x-text="name" @profile-updated.window="name = $event.detail.name"></p><p class="truncate text-[10px] muted">{{ auth()->user()->email }}</p></div></div>
