@@ -48,6 +48,14 @@ class DatabaseSeeder extends Seeder
             ->has(TargetTestAccount::factory(2))
             ->create();
 
+        // Live demo target: the running app itself, so the agent's tools reach a real host on the allowlist.
+        Target::factory()->for($client)->create([
+            'nama' => 'Jejaksa Local (demo)',
+            'base_url' => 'http://localhost:8000',
+            'lingkungan' => 'staging',
+            'status_verifikasi' => Target::VERIFIED,
+        ]);
+
         $findings = collect();
 
         foreach ($targets as $target) {
