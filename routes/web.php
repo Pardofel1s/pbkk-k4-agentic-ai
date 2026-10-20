@@ -19,6 +19,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     }
     Volt::route('executions/{record}', 'pages.workspace')->defaults('area', 'executions')->name('executions.show');
     Volt::route('settings', 'pages.workspace')->defaults('area', 'settings')->name('settings');
+
+    // Live agent chat wired to the real backend (StartAgentTurn + policies), unlike the demo workspace.
+    Volt::route('agent', 'agent.chat')->name('agent.chat');
 });
 
 Route::view('profile', 'profile')
