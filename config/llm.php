@@ -50,6 +50,10 @@ return [
     */
     'tools' => [
         App\Tools\CheckSecurityHeadersTool::class,
+        App\Tools\CheckCookieFlagsTool::class,
+        App\Tools\CheckCsrfTokenTool::class,
+        App\Tools\ScanOpenPortsTool::class,
+        App\Tools\TestReflectedXssTool::class,
     ],
 
     /*
