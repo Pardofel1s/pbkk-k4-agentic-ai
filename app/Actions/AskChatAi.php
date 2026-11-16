@@ -20,13 +20,18 @@ class AskChatAi
      * The model name and token usage come from the provider's own response
      * (OpenAI-compatible `model` and `usage` fields), so after a provider
      * switch the log still shows what actually answered.
+     *
+     * @param  (callable(string): void)|null  $onChunk
      */
-    public function handle(User $user, string $prompt): ChatLog
+    public function handle(User $user, string $prompt, ?callable $onChunk = null): ChatLog
     {
-        $response = $this->llm->chat(
-            [['role' => 'user', 'content' => $prompt]],
-            ['tools' => false],
-        );
+        $messages = [['role' => 'user', 'content' => $prompt]];
+
+        if ($onChunk === null) {
+            $response = $this->llm->chat($messages, ['tools' => false]);
+        } else {
+            $response = $this->llm->stream($messages, $onChunk);
+        }
 
         $usage = $response->raw['usage'] ?? [];
         $promptTokens = $usage['prompt_tokens'] ?? null;
