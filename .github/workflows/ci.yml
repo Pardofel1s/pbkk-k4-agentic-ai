@@ -31,3 +31,22 @@ jobs:
 
       - name: Tests
         run: php artisan test
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: No .env committed
+        run: |
+          if git ls-files | grep -E '(^|/)\.env$'; then
+            echo "::error::File .env ikut ter-commit."
+            exit 1
+          fi
+
+      - name: No API keys / secrets committed
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
