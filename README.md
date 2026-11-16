@@ -23,6 +23,66 @@ Titik implementasi: `resources/views/welcome.blade.php`, `resources/views/jejaks
 
 Window NativePHP dikonfigurasi menjadi **Jejaksa**, 1440×900 (minimum 1024×768), masuk ke route workspace/login. Pengujian binary Windows dan pemulihan job nyata masih diperlukan. Route baru tetap memerlukan review BE-1 sesuai CODEOWNERS.
 
+## Secure LLM Chat API Hub (Tugas Mandiri)
+
+Backend API terproteksi yang menerima prompt teks, meneruskannya ke LLM (Senopati AI ITS atau Ollama), lalu menyimpan riwayatnya. Antarmuka Livewire dipasang di atasnya pada Pertemuan 12. Panduan lengkap, contoh `curl`/PowerShell, dan daftar kode status: [`docs/api-chat-ai.md`](docs/api-chat-ai.md).
+
+| Endpoint | Auth | Fungsi |
+|---|---|---|
+| `POST /api/login` | tanpa token (maks. 5 percobaan/menit) | Tukar email + password dengan token Sanctum |
+| `POST /api/chat-ai` | `auth:sanctum` | Kirim `prompt` (string, wajib, maks. 1000 karakter), terima jawaban LLM |
+| `POST /api/logout` | `auth:sanctum` | Cabut token yang dipakai |
+
+Respon sukses `POST /api/chat-ai`:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "session_id": 12,
+    "model_used": "qwen3:14b",
+    "prompt": "Jelaskan middleware!",
+    "ai_response": "Middleware adalah...",
+    "timestamp": "2026-11-15 09:30:00"
+  }
+}
+```
+
+`session_id` adalah id baris di tabel `chat_logs`. Prompt kosong, bukan string, atau lebih dari 1000 karakter ditolak `422`; tanpa token `401`; LLM tidak bisa dihubungi `502` (tidak ada log yang disimpan).
+
+Alur request (terpisah dari agent loop di bagian Arsitektur):
+
+```
+POST /api/chat-ai ──> auth:sanctum ──> ChatAiRequest ──> ChatAiController ──> AskChatAi ──> LlmClient ──> LLM
+                                       (validasi)                                │
+                                                                                 ▼
+                                                        chat_logs (SQLite) ──> ChatLogResource ──> JSON
+```
+
+Tabel `chat_logs`: `user_id`, `prompt`, `ai_response`, `model_used`, `prompt_tokens`, `completion_tokens`, `total_tokens`. Nama model dan jumlah token dicatat dari respon provider (`model`, `usage`), bukan dari config.
+
+Titik implementasi: `routes/api.php`, `app/Http/Controllers/Api/`, `app/Http/Requests/Api/`, `app/Http/Resources/ChatLogResource.php`, `app/Actions/AskChatAi.php`, `app/Models/ChatLog.php`, dan migration `create_chat_logs_table`. Test: `tests/Feature/Api/` (login, 401, validasi, format respon, log, 502).
+
+> Sanctum sudah tercatat di `composer.json`/`composer.lock`. Anggota lain cukup `composer install` (atau `composer run setup`) lalu `php artisan migrate`; **tidak perlu** menjalankan `php artisan install:api` lagi.
+
+**Checklist tugas**
+
+Sisi API & database (area BE-1)
+- [x] Sanctum, `POST /api/login`, `POST /api/logout`
+- [x] `POST /api/chat-ai` di dalam grup middleware `auth:sanctum`
+- [x] `ChatAiRequest`: `prompt` required, string, max 1000
+- [x] Tabel `chat_logs` (user, prompt, jawaban AI, model, token)
+- [x] Respon dibungkus `ChatLogResource` (`status` + `data`)
+- [x] Feature test untuk jalur API
+- [ ] Uji ujung ke ujung dengan LLM sungguhan (Senopati / Ollama)
+
+Sisi integrasi LLM (area BE-2)
+- [ ] Challenge 3: fallback otomatis ke Senopati AI ITS bila Ollama lokal mati
+- [ ] Challenge 2: system prompt bertema DAST
+- [ ] Challenge 1: response streaming (Server-Sent Events)
+
+**Bersama:** demo pitching 5 menit.
+
 ## Tema: Dynamic Application Security Testing (DAST)
 
 Kami berperan sebagai vendor DAST pihak ketiga untuk portal web fintech hipotetis **PT XXX** (studi kasus lengkap: [`docs/rancangan.md`](docs/rancangan.md)). Layanan dibagi menjadi 4 pilar:
@@ -44,6 +104,7 @@ Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah
 | Frontend | Blade + Livewire 3 (Volt, class API) |
 | Auth | Laravel Breeze (stack Livewire) |
 | Authorization | Spatie Laravel Permission (RBAC) |
+| API auth | Laravel Sanctum (personal access token) |
 | Database | SQLite + Eloquent |
 | LLM | Senopati AI ITS (default) / Ollama (cadangan) — endpoint OpenAI-compatible |
 | Tool execution | Action class (`App\Tools\Tool`) + Symfony Process |
@@ -84,6 +145,8 @@ Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah
    | `composer native:dev` | Jendela desktop NativePHP |
    | `composer test` | Semua test |
    | `vendor/bin/pint` | Rapikan kode ke PSR-12 |
+
+Mencoba API chat (login, token, `POST /api/chat-ai`): lihat [`docs/api-chat-ai.md`](docs/api-chat-ai.md). Setelah `php artisan db:seed`, akun dev `analyst@example.com` / `password` bisa dipakai untuk login lewat `POST /api/login`.
 
 > Path folder yang mengandung apostrof (mis. `Adinata's`) **dan** folder berawalan angka (mis. `5th Semester`) bikin Pest error `InvalidTestClassName`. Clone ke path biasa saja.
 
@@ -145,13 +208,31 @@ Kontrak yang sudah disediakan:
 
 **Bersama:** slide pitch maks. 5 halaman / 5 menit.
 
+## Tugas Week 11 (kumpul link repo di LMS H-1 Pertemuan 12)
+
+**BE — @artificialangel**
+- [x] Tool DAST lanjutan & eksekusi aksi tervalidasi di ToolRegistry (validasi input, allowlist target, dan penanganan error)
+- [x] Alur persetujuan pengguna (Human-in-the-Loop) untuk aksi berisiko tinggi pada ChatSession / ToolCall
+- [x] Logging polymorphic ToolCall (`loggable`) ke tabel hasil pemindaian / temuan DAST
+- [x] Integrasi end-to-end loop agentic (`LlmService` → `ToolCall` → respons final ke `ChatMessage`)
+- [ ] Feature & unit test alur agentic loop, eksekusi tool, dan validasi keamanan
+
+**FE — @shfawr**
+- [ ] Integrasi UI chat Livewire Volt dengan backend agentic loop (menggantikan data demo session dengan data asli)
+- [ ] Tampilan status eksekusi tool, card persetujuan (approve/reject), dan riwayat `ToolCall` di antarmuka chat
+- [ ] Visualisasi ringkasan hasil audit & temuan keamanan pada halaman detail sesi
+- [ ] Pengujian aplikasi desktop lewat `composer native:dev` serta penyesuaian konfigurasi window di `NativeAppServiceProvider`
+- [ ] Test Livewire untuk pengiriman pesan, interaksi persetujuan tool, dan pembaruan state chat
+
+Bersama: pengujian end-to-end aplikasi & pembaruan dokumentasi pada `README.md`.
+
 ## Menuju UAS (Week 16)
 
 | Target | Pemilik |
 |---|---|
 | Chat Livewire berfungsi, loading state / polling | FE |
 | `php artisan native:build win` → `.exe` jalan di laptop lain | FE |
-| RBAC Spatie sesuai [`docs/rbac.md`](docs/rbac.md) (seeder, Policy, action class), tabel `comments`, CRUD lengkap, API Sanctum | BE-1 |
+| RBAC Spatie sesuai [`docs/rbac.md`](docs/rbac.md) (seeder, Policy, action class), tabel `comments`, CRUD lengkap, API Sanctum (login token + `POST /api/chat-ai` sudah ada, lihat [`docs/api-chat-ai.md`](docs/api-chat-ai.md)) | BE-1 |
 | Halaman per role sesuai [`docs/rbac.md`](docs/rbac.md): target, verifikasi, kelola user, detail scan/finding/report + komentar | FE |
 | Agent loop otonom, tools sesuai tema, mitigasi command injection, eksekusi via Queue | BE-2 |
 | Minimal 5 skenario test lulus | Semua |
@@ -175,7 +256,7 @@ Repo ini sudah berisi guideline & skill resmi Laravel ([Laravel Boost](https://l
 
 ## ERD
 
-Model inti Week 9: `User` → `ChatSession` → `ChatMessage` → `ToolCall` (= *ToolExecutionLog* di slide). Sisanya domain DAST.
+Model inti Week 9: `User` → `ChatSession` → `ChatMessage` → `ToolCall` (= *ToolExecutionLog* di slide). Sisanya domain DAST. `chat_logs` adalah log endpoint `POST /api/chat-ai` (tugas mandiri) dan berdiri sendiri, terpisah dari `chat_sessions`.
 
 Versi gambar untuk slide: [`docs/erd.png`](docs/erd.png) / [`docs/erd.svg`](docs/erd.svg) — dirender dari diagram Mermaid di bawah. Kalau skema berubah, ubah Mermaid-nya lalu render ulang: `npx @mermaid-js/mermaid-cli -i erd.mmd -o docs/erd.png -b white -s 3`.
 
@@ -184,6 +265,7 @@ Akses (role, permission, policy) dijelaskan di [`docs/rbac.md`](docs/rbac.md); t
 ```mermaid
 erDiagram
     users ||--o{ chat_sessions : has
+    users ||--o{ chat_logs : has
     users ||--o{ targets : owns
     chat_sessions ||--o{ chat_messages : has
     chat_messages ||--o{ tool_calls : triggers
@@ -217,6 +299,16 @@ erDiagram
         bigint user_id FK
         string judul "nullable"
         string model_llm "nullable"
+    }
+    chat_logs {
+        bigint id PK
+        bigint user_id FK
+        text prompt
+        longtext ai_response
+        string model_used
+        int prompt_tokens "nullable"
+        int completion_tokens "nullable"
+        int total_tokens "nullable"
     }
     chat_messages {
         bigint id PK
