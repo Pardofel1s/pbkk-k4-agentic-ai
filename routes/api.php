@@ -13,4 +13,5 @@ Route::post('login', [AuthTokenController::class, 'store'])
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('logout', [AuthTokenController::class, 'destroy'])->name('api.logout');
     Route::post('chat-ai', [ChatAiController::class, 'store'])->name('api.chat-ai');
+    Route::post('chat-ai/stream', [ChatAiController::class, 'stream'])->name('api.chat-ai.stream');
 });
