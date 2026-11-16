@@ -10,7 +10,7 @@
 
 ## Cek sebelum merge
 
-<!-- CI "checklist" gagal selama masih ada kotak kosong di bagian ini. Centang dengan jujur. -->
+<!-- Tidak lagi dipaksa CI (workflow "PR checklist" dinonaktifkan); CI otomatis yang mengecek test, pint, build dan secret. Tetap centang dengan jujur. -->
 
 - [ ] `composer test` lulus di lokal
 - [ ] `vendor/bin/pint` sudah dijalankan (PSR-12)

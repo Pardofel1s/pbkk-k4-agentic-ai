@@ -1,8 +1,10 @@
 name: PR checklist
 
+# Disabled: CI (ci.yml) now gates PRs. Kept for manual runs; to re-enable, put back:
+#   pull_request:
+#     types: [opened, edited, synchronize, reopened]
 on:
-  pull_request:
-    types: [opened, edited, synchronize, reopened]
+  workflow_dispatch:
 
 jobs:
   checklist:
