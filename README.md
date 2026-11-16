@@ -25,12 +25,13 @@ Window NativePHP dikonfigurasi menjadi **Jejaksa**, 1440×900 (minimum 1024×768
 
 ## Secure LLM Chat API Hub (Tugas Mandiri)
 
-Backend API terproteksi yang menerima prompt teks, meneruskannya ke LLM (Senopati AI ITS atau Ollama), lalu menyimpan riwayatnya. Antarmuka Livewire dipasang di atasnya pada Pertemuan 12. Panduan lengkap, contoh `curl`/PowerShell, dan daftar kode status: [`docs/api-chat-ai.md`](docs/api-chat-ai.md).
+Backend API terproteksi yang menerima prompt, memanggil Ollama sebagai provider utama, dan menyimpan jawaban beserta penggunaan token. Saat Ollama gagal terhubung, timeout, atau mengembalikan HTTP 5xx, request dialihkan ke Senopati AI ITS. Antarmuka Livewire F0 masih memakai data demo session. Contoh login dan chat dasar tersedia di [`docs/api-chat-ai.md`](docs/api-chat-ai.md); konfigurasi fallback dan kontrak streaming terbaru dijelaskan di bawah.
 
 | Endpoint | Auth | Fungsi |
 |---|---|---|
 | `POST /api/login` | tanpa token (maks. 5 percobaan/menit) | Tukar email + password dengan token Sanctum |
 | `POST /api/chat-ai` | `auth:sanctum` | Kirim `prompt` (string, wajib, maks. 1000 karakter), terima jawaban LLM |
+| `POST /api/chat-ai/stream` | `auth:sanctum` | Kirim prompt dan terima potongan jawaban melalui Server-Sent Events |
 | `POST /api/logout` | `auth:sanctum` | Cabut token yang dipakai |
 
 Respon sukses `POST /api/chat-ai`:
@@ -52,14 +53,18 @@ Respon sukses `POST /api/chat-ai`:
 
 Alur request (terpisah dari agent loop di bagian Arsitektur):
 
-```
-POST /api/chat-ai ──> auth:sanctum ──> ChatAiRequest ──> ChatAiController ──> AskChatAi ──> LlmClient ──> LLM
-                                       (validasi)                                │
-                                                                                 ▼
-                                                        chat_logs (SQLite) ──> ChatLogResource ──> JSON
+```mermaid
+flowchart TD
+    Request["POST /api/chat-ai"] --> Auth["Sanctum dan validasi prompt"]
+    Auth --> Client["AskChatAi dan LlmClient"]
+    Client --> Ollama["Ollama lokal"]
+    Ollama -->|"Respons berhasil"| Logs["Simpan chat_logs"]
+    Ollama -->|"Koneksi gagal, timeout, atau HTTP 5xx"| Senopati["Senopati AI ITS"]
+    Senopati --> Logs
+    Logs --> Resource["ChatLogResource: status dan data"]
 ```
 
-Tabel `chat_logs`: `user_id`, `prompt`, `ai_response`, `model_used`, `prompt_tokens`, `completion_tokens`, `total_tokens`. Nama model dan jumlah token dicatat dari respon provider (`model`, `usage`), bukan dari config.
+Tabel `chat_logs`: `user_id`, `prompt`, `ai_response`, `model_used`, `prompt_tokens`, `completion_tokens`, `total_tokens`. Nama model dan penggunaan token dibaca dari `model` dan `usage` pada respons provider. Jika nama model tidak diberikan, client memakai model yang dikirim ke provider tersebut. Jika `total_tokens` tidak diberikan, action menjumlahkan komponen token yang tersedia; jika seluruh penggunaan token tidak tersedia, total dicatat sebagai 0. Nilai 0 tersebut bukan pengukuran token dari provider.
 
 Titik implementasi: `routes/api.php`, `app/Http/Controllers/Api/`, `app/Http/Requests/Api/`, `app/Http/Resources/ChatLogResource.php`, `app/Actions/AskChatAi.php`, `app/Models/ChatLog.php`, dan migration `create_chat_logs_table`. Test: `tests/Feature/Api/` (login, 401, validasi, format respon, log, 502).
 
@@ -77,11 +82,76 @@ Sisi API & database (area BE-1)
 - [ ] Uji ujung ke ujung dengan LLM sungguhan (Senopati / Ollama)
 
 Sisi integrasi LLM (area BE-2)
-- [ ] Challenge 3: fallback otomatis ke Senopati AI ITS bila Ollama lokal mati
-- [ ] Challenge 2: system prompt bertema DAST
-- [ ] Challenge 1: response streaming (Server-Sent Events)
+- [x] Challenge 3: fallback otomatis Ollama ke Senopati untuk kegagalan koneksi, timeout, dan HTTP 5xx
+- [x] Challenge 2: system prompt bertema DAST melalui `config/llm.php`
+- [x] Challenge 1: streaming melalui `LlmClient::stream()` dan `POST /api/chat-ai/stream`
+- [x] Pengujian service dan API menggunakan `Http::fake()`
 
-**Bersama:** demo pitching 5 menit.
+**Bersama:** demo pitching 5 menit. Uji provider asli dan rekaman demo belum dikonfirmasi selesai.
+
+## Konfigurasi LLM
+
+Konfigurasi provider, timeout, system prompt DAST, tool, dan allowlist berada di `config/llm.php`. Contoh `.env` lokal berikut tidak berisi key asli.
+
+```dotenv
+# Senopati AI ITS, dipakai sebagai fallback.
+LLM_BASE_URL=https://senopati.its.ac.id/llm-gateway/v1
+LLM_MODEL=qwen3:14b
+LLM_API_KEY=
+LLM_TIMEOUT=120
+
+# Ollama sebagai provider utama.
+OLLAMA_ENABLED=true
+OLLAMA_BASE_URL=http://127.0.0.1:11434/v1
+OLLAMA_MODEL=qwen3:14b
+OLLAMA_CONNECT_TIMEOUT=5
+OLLAMA_TIMEOUT=60
+```
+
+Isi `LLM_API_KEY` dari key kelompok melalui jalur pribadi. Key dikirim sebagai Bearer token ke Senopati; request Ollama lokal tidak memakai key Senopati. `.env` tidak di-commit. `.env.example` menyimpan nama variabel dengan nilai key kosong.
+
+Gunakan `OLLAMA_ENABLED=false` untuk menghubungi Senopati langsung. Pertahankan `LLM_BASE_URL` sebagai endpoint Senopati saat mengaktifkan fallback. Setelah mengubah `.env`, jalankan `php artisan config:clear` dan restart worker queue jika dipakai.
+
+System prompt DAST disisipkan jika pesan belum memiliki role `system`. Instruksi mengarahkan jawaban ke analisis keamanan aplikasi web, mitigasi, dan kesimpulan yang didukung bukti. Agent yang sudah mengirim system prompt sendiri tetap memakai pesan tersebut.
+
+### Kontrak streaming
+
+`POST /api/chat-ai/stream` menerima body dan autentikasi yang sama dengan endpoint chat biasa. Gunakan `Accept: text/event-stream` dan Bearer token Sanctum. Respons memiliki `Content-Type: text/event-stream; charset=UTF-8`.
+
+| Event | Isi | Makna |
+|---|---|---|
+| `chunk` | `{"text":"potongan jawaban"}` | Potongan teks diteruskan ketika diterima dari provider. |
+| `done` | Resource dengan `status` dan `data` | Jawaban lengkap dan penggunaan token sudah disimpan. |
+| `error` | `{"status":"error","message":"..."}` | Request gagal diselesaikan; event `done` tidak dikirim. |
+
+Client meminta statistik penggunaan melalui `stream_options.include_usage`. Stream terputus tidak disimpan sebagai jawaban lengkap. Fallback streaming hanya dilakukan sebelum teks pertama dikirim, agar jawaban dari dua provider tidak tercampur. Setelah stream dimulai, kegagalan dilaporkan melalui event `error` pada respons HTTP 200 yang sudah terbuka. Autentikasi dan validasi tetap menghasilkan HTTP 401 atau 422 sebelum stream dimulai.
+
+### Hasil pengujian yang sudah dikonfirmasi
+
+Pengujian berikut dijalankan di Windows melalui Git Bash, PHP CLI 8.5.10, menggunakan dependency backend pada manifest pengujian terpisah.
+
+| Kelompok tes | Hasil | Assertions | Durasi |
+|---|---|---|---|
+| `tests/Feature/Services` | 21 passed | 57 | 2,08 detik |
+| `tests/Feature/Api` | 25 passed | 117 | 2,34 detik |
+| Total kedua kelompok | 46 passed | 174 | 4,42 detik |
+
+```bash
+php artisan test --compact tests/Feature/Services --stop-on-failure
+php artisan test --compact tests/Feature/Api --stop-on-failure
+```
+
+Cakupan meliputi pemilihan provider, fallback, autentikasi key provider, system prompt, streaming, penggunaan token, login/logout Sanctum, HTTP 401/422/502, format resource, serta penyimpanan log. `Http::fake()` digunakan untuk request LLM; hasil ini tidak membuktikan koneksi ke provider asli.
+
+Pengujian seluruh suite lokal terbaru berhasil: **171 passed, 630 assertions**, dalam **12,09 detik** setelah build frontend dan koreksi tes log.
+
+```bash
+npm ci
+npm run build
+php artisan test --compact --stop-on-failure
+```
+
+Masih memerlukan konfirmasi: koneksi provider asli, fallback dan streaming langsung, peninjauan tampilan secara manual, serta binary NativePHP.
 
 ## Tema: Dynamic Application Security Testing (DAST)
 
@@ -106,7 +176,7 @@ Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah
 | Authorization | Spatie Laravel Permission (RBAC) |
 | API auth | Laravel Sanctum (personal access token) |
 | Database | SQLite + Eloquent |
-| LLM | Senopati AI ITS (default) / Ollama (cadangan) — endpoint OpenAI-compatible |
+| LLM | Ollama lokal (utama) / Senopati AI ITS (fallback) — endpoint OpenAI-compatible |
 | Tool execution | Action class (`App\Tools\Tool`) + Symfony Process |
 | Background job | Laravel Queue (driver `database`) |
 | Desktop | NativePHP Desktop (Electron) |
@@ -125,26 +195,30 @@ Hasilnya berupa temuan (`findings`), laporan (`reports`), dan sertifikat setelah
 
 ## Setup (Windows)
 
-1. **PHP 8.4 + Composer.** Paling gampang pakai [Laravel Herd](https://herd.laravel.com/windows). Kalau pakai XAMPP, pastikan PHP-nya 8.4 dan aktifkan `extension=zip` di `php.ini` (wajib untuk NativePHP).
-2. **Node.js 22+** dan **git**.
+1. **PHP 8.4.1+ + Composer.** Paling gampang pakai [Laravel Herd](https://herd.laravel.com/windows). Kalau pakai XAMPP, pastikan PHP-nya 8.4 dan aktifkan `extension=zip` di `php.ini` (wajib untuk NativePHP).
+2. **Node.js 22.12+** dan **git** (sesuai kebutuhan Vite pada lockfile).
 3. Clone & install:
 
    ```bash
-   git clone https://github.com/Pardofel1s/pbkk-k4-agentic-ai.git
-   cd pbkk-k4-agentic-ai
+   git clone https://github.com/artificialangel/PBKK-B-K4.git
+   cd PBKK-B-K4
    composer run setup
    ```
 
    `setup` meng-copy `.env`, generate key, migrate SQLite, dan build asset. Lalu isi `ADMIN_PASSWORD` di `.env` dan jalankan `php artisan db:seed` untuk role, admin, dan data dummy (login dev: `analyst@example.com` / `client@example.com`, password `password`).
-4. Untuk integrasi LLM, isi `LLM_API_KEY` di `.env` — **tanya langsung ke Kamal ([@Pardofel1s](https://github.com/Pardofel1s))** lewat chat pribadi. Jangan di-commit dan jangan ditempel di grup/issue/PR. Mau pakai Ollama lokal? Ganti `LLM_BASE_URL=http://localhost:11434/v1` dan kosongkan key. Frontend demo tidak memerlukan API key LLM.
+4. Untuk integrasi LLM, isi `LLM_API_KEY` di `.env` — **tanya langsung ke Kamal ([@Pardofel1s](https://github.com/Pardofel1s))** lewat chat pribadi. Jangan di-commit dan jangan ditempel di grup/issue/PR. Pengaturan Ollama lokal memakai variabel `OLLAMA_*`. Untuk Senopati langsung, atur `OLLAMA_ENABLED=false`. Frontend demo tidak memerlukan API key LLM.
 5. Jalankan:
 
    | Perintah | Untuk |
    |---|---|
    | `composer run dev` | Web di browser (server + queue + vite) |
    | `composer native:dev` | Jendela desktop NativePHP |
-   | `composer test` | Semua test |
+   | `composer test` | Semua test; membutuhkan build frontend untuk tes tampilan |
    | `vendor/bin/pint` | Rapikan kode ke PSR-12 |
+
+Jika muncul `Vite manifest not found`, jalankan `npm ci` lalu `npm run build` dari folder yang berisi `artisan` dan `package.json`. Kode FE berada di `resources/`; hasil build dibuat di `public/build/`.
+
+Untuk pengujian backend pada mesin yang gagal mengunduh runtime NativePHP, manifest salinan `composer.api-test.json` dapat dipakai sementara untuk memasang dependency tanpa `nativephp/desktop`. Manifest utama tetap mempertahankan NativePHP. Mode pengujian tersebut tidak memvalidasi desktop. Simpan manifest sementara, installer perbaikan, payload `_api-repair`, dan `backup-api-*` di luar commit.
 
 Mencoba API chat (login, token, `POST /api/chat-ai`): lihat [`docs/api-chat-ai.md`](docs/api-chat-ai.md). Setelah `php artisan db:seed`, akun dev `analyst@example.com` / `password` bisa dipakai untuk login lewat `POST /api/login`.
 
@@ -169,14 +243,14 @@ gh pr create --fill
 
 Modular monolith: Laravel MVC + service layer + agent tool-calling. Diagram berikut adalah arah integrasi backend; F0 memakai adapter demo tanpa menjalankan agent loop.
 
-```
-Livewire (chat UI) ──> Agent loop (BE-2) ──> LLM /chat/completions (Senopati/Ollama)
-                              │  tool_calls
-                              ▼
-                       ToolRegistry ──> Tool (Action class) ──> Symfony Process
-                              │                       (dijalankan via Queue Job)
-                              ▼
-                 ChatSession / ChatMessage / ToolExecutionLog (SQLite)
+```mermaid
+flowchart TD
+    Queue["Queue job agent"] --> Agent["AgentLoop"]
+    Agent --> LLM["LlmClient: Ollama dan Senopati"]
+    LLM -->|"Permintaan tool"| Executor["ToolExecutor dan ToolRegistry"]
+    Executor --> Tool["Tool yang diizinkan"]
+    Tool -->|"Hasil untuk model"| Agent
+    Agent --> Data["ChatMessage dan ToolCall"]
 ```
 
 Kontrak yang sudah disediakan:
@@ -210,19 +284,19 @@ Kontrak yang sudah disediakan:
 
 ## Tugas Week 11 (kumpul link repo di LMS H-1 Pertemuan 12)
 
-**BE — @artificialangel**
-- [x] Tool DAST lanjutan & eksekusi aksi tervalidasi di ToolRegistry (validasi input, allowlist target, dan penanganan error)
-- [x] Alur persetujuan pengguna (Human-in-the-Loop) untuk aksi berisiko tinggi pada ChatSession / ToolCall
-- [x] Logging polymorphic ToolCall (`loggable`) ke tabel hasil pemindaian / temuan DAST
-- [x] Integrasi end-to-end loop agentic (`LlmService` → `ToolCall` → respons final ke `ChatMessage`)
-- [ ] Feature & unit test alur agentic loop, eksekusi tool, dan validasi keamanan
+**Backend API dan integrasi LLM — @artificialangel / anggota backend kelompok**
+- [x] Route login/logout dan chat dengan token Sanctum
+- [x] FormRequest `prompt` required, string, max 1000
+- [x] Model, migration, factory, dan penyimpanan `chat_logs`
+- [x] Resource respons dengan `status` dan `data`
+- [x] Service Ollama dan Senopati dengan metadata model dan token
+- [x] Fallback otomatis Ollama ke Senopati
+- [x] System prompt DAST melalui konfigurasi
+- [x] Streaming SSE pada service dan endpoint API
+- [x] Pengujian service dan API dengan respons LLM palsu: 46 passed
+- [ ] Uji ujung ke ujung dengan provider asli dan rekaman demo
 
-**FE — @shfawr**
-- [ ] Integrasi UI chat Livewire Volt dengan backend agentic loop (menggantikan data demo session dengan data asli)
-- [ ] Tampilan status eksekusi tool, card persetujuan (approve/reject), dan riwayat `ToolCall` di antarmuka chat
-- [ ] Visualisasi ringkasan hasil audit & temuan keamanan pada halaman detail sesi
-- [ ] Pengujian aplikasi desktop lewat `composer native:dev` serta penyesuaian konfigurasi window di `NativeAppServiceProvider`
-- [ ] Test Livewire untuk pengiriman pesan, interaksi persetujuan tool, dan pembaruan state chat
+Backend juga menyediakan agent loop pada `app/Services/Agent/AgentLoop.php` serta eksekusi tool melalui `ToolExecutor`. Persetujuan rencana pada UI F0 masih merupakan alur demo session; integrasi UI dengan eksekusi backend nyata belum dinyatakan selesai.
 
 Bersama: pengujian end-to-end aplikasi & pembaruan dokumentasi pada `README.md`.
 
