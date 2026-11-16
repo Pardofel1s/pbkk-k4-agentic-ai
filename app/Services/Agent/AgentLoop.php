@@ -47,9 +47,14 @@ class AgentLoop
         $maxSteps = max(1, (int) config('llm.max_steps', 5));
         $budget = (int) config('llm.turn_timeout', 420);
         $deadline = now()->getTimestamp() + $budget;
+        $requestTimeout = (int) config('llm.timeout', 120);
+
+        if ((bool) config('llm.ollama.enabled', false)) {
+            $requestTimeout += (int) config('llm.ollama.timeout', 60);
+        }
 
         for ($step = 0; $step < $maxSteps; $step++) {
-            if ($this->secondsLeft($deadline) < (int) config('llm.timeout', 120)) {
+            if ($this->secondsLeft($deadline) < $requestTimeout) {
                 return $this->say($session, "Batas waktu {$budget} detik tercapai sebelum agent selesai. Coba persempit permintaannya.");
             }
 
