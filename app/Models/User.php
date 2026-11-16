@@ -48,6 +48,14 @@ class User extends Authenticatable
     }
 
     /**
+     * @return HasMany<ChatLog, $this>
+     */
+    public function chatLogs(): HasMany
+    {
+        return $this->hasMany(ChatLog::class);
+    }
+
+    /**
      * @return HasMany<Target, $this>
      */
     public function targets(): HasMany
