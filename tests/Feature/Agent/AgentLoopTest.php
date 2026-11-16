@@ -209,6 +209,19 @@ it('does not start an LLM call when the turn budget cannot fit one', function ()
     Http::assertNothingSent();
 });
 
+it('reserves enough time for Ollama and its Senopati fallback', function () {
+    config()->set('llm.turn_timeout', 150);
+    config()->set('llm.timeout', 120);
+    config()->set('llm.ollama.enabled', true);
+    config()->set('llm.ollama.timeout', 60);
+    Http::fake();
+
+    $reply = $this->loop->run($this->session, $this->context);
+
+    expect($reply->isi)->toContain('Batas waktu 150 detik');
+    Http::assertNothingSent();
+});
+
 it('skips tools and stops when the turn runs out of time', function () {
     config()->set('llm.turn_timeout', 300);
     config()->set('llm.timeout', 120);
