@@ -33,5 +33,6 @@
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="ADMIN_PASSWORD" value="password"/>
+        <env name="OLLAMA_ENABLED" value="false" force="true"/>
     </php>
 </phpunit>

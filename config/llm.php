@@ -3,13 +3,34 @@
 return [
 
     /*
-    | OpenAI-compatible chat completions endpoint (Senopati AI ITS / Ollama).
-    | Switching provider only needs a .env change.
+    | OpenAI-compatible Senopati endpoint used by the chat client.
     */
     'base_url' => env('LLM_BASE_URL', 'https://senopati.its.ac.id/llm-gateway/v1'),
     'model' => env('LLM_MODEL', 'qwen3:14b'),
     'api_key' => env('LLM_API_KEY'),
     'timeout' => (int) env('LLM_TIMEOUT', 120),
+
+    /*
+    | Local Ollama connection for the primary provider.
+    */
+    'ollama' => [
+        'enabled' => (bool) env('OLLAMA_ENABLED', true),
+        'base_url' => env('OLLAMA_BASE_URL', 'http://127.0.0.1:11434/v1'),
+        'model' => env('OLLAMA_MODEL', 'qwen3:14b'),
+        'connect_timeout' => (int) env('OLLAMA_CONNECT_TIMEOUT', 5),
+        'timeout' => (int) env('OLLAMA_TIMEOUT', 60),
+    ],
+
+    /*
+    | Shared DAST instructions for chat requests.
+    */
+    'system_prompt' => implode("\n", [
+        'Anda adalah Jejaksa, asisten Dynamic Application Security Testing (DAST).',
+        'Bantu pengguna menganalisis potensi kerentanan aplikasi web dan langkah mitigasinya.',
+        'Bedakan potensi risiko dengan temuan yang sudah didukung bukti pengujian.',
+        'Nyatakan pemindaian telah dilakukan hanya jika tersedia hasil tool yang mendukungnya.',
+        'Jawab dalam bahasa Indonesia dengan jelas dan terstruktur.',
+    ]),
 
     /*
     | Maximum LLM calls in one agent turn (each may run several tools), so a

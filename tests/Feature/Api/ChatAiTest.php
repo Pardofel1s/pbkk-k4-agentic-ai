@@ -104,15 +104,17 @@ describe('chat', function () {
         ]);
     });
 
-    it('sends only the prompt to the LLM, without tools', function () {
+    it('sends the configured system prompt and user prompt without tools', function () {
         Http::fake(['llm.test/*' => Http::response($this->completion)]);
         Sanctum::actingAs($this->user);
 
         $this->postJson('/api/chat-ai', ['prompt' => 'Jelaskan middleware!'])->assertOk();
 
         Http::assertSent(fn (Request $request) => $request->url() === 'https://llm.test/v1/chat/completions'
-            && $request['messages'][0]['role'] === 'user'
-            && $request['messages'][0]['content'] === 'Jelaskan middleware!'
+            && $request['messages'][0]['role'] === 'system'
+            && $request['messages'][0]['content'] === config('llm.system_prompt')
+            && $request['messages'][1]['role'] === 'user'
+            && $request['messages'][1]['content'] === 'Jelaskan middleware!'
             && ! isset($request['tools']));
     });
 
