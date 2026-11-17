@@ -54,6 +54,17 @@ it('returns assistant text for a plain response', function () {
         ->and($response->toolCalls)->toBe([]);
 });
 
+it('drops reasoning the model leaked into content before </think>', function () {
+    Http::fake([
+        'llm.test/*' => Http::response([
+            'choices' => [['message' => ['role' => 'assistant', 'content' => "起来\n\nOkay, the user asks...\n</think>\nSQL injection adalah serangan."]]],
+        ]),
+    ]);
+
+    expect($this->bareClient->chat([['role' => 'user', 'content' => 'hi']])->content)
+        ->toBe('SQL injection adalah serangan.');
+});
+
 it('parses tool_calls from the response and decodes their arguments', function () {
     Http::fake([
         'llm.test/*' => Http::response([
