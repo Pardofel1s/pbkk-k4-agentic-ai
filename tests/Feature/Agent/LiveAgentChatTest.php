@@ -65,6 +65,24 @@ it('runs a full live agent turn: prompt, tool call, answer', function () {
     $component->assertSet('prompt', '');
 });
 
+it('renders agent markdown but strips raw html from the llm', function () {
+    $user = analyst();
+    demoTarget();
+    $session = $user->chatSessions()->create(['model_llm' => 'qwen3:14b']);
+    $session->chatMessages()->create([
+        'role' => 'assistant',
+        'isi' => "**Temuan:**\n\n- CSP hilang\n\n<script>alert(1)</script>[x](javascript:alert(1))",
+    ]);
+
+    $this->actingAs($user);
+
+    Volt::test('agent.chat')
+        ->assertSeeHtml('<strong>Temuan:</strong>')
+        ->assertSeeHtml('<li>CSP hilang</li>')
+        ->assertDontSeeHtml('<script>alert(1)</script>')
+        ->assertDontSeeHtml('javascript:alert(1)');
+});
+
 it('is reachable only by users who may chat', function () {
     demoTarget();
 
