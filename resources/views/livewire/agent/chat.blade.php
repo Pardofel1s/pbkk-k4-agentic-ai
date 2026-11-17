@@ -146,8 +146,11 @@ new #[Layout('layouts.app')] class extends Component
                             <p class="mb-2 text-[10px] uppercase tracking-widest muted {{ $message->role === 'user' ? 'text-right' : '' }}">
                                 {{ $message->role === 'user' ? 'Anda' : 'Jejaksa' }}
                             </p>
-                            @if($message->isi !== '')
-                                <div class="chat-bubble {{ $message->role === 'user' ? 'user' : '' }} whitespace-pre-wrap">{{ $message->isi }}</div>
+                            @if($message->isi !== '' && $message->role === 'user')
+                                <div class="chat-bubble user whitespace-pre-wrap">{{ $message->isi }}</div>
+                            @elseif($message->isi !== '')
+                                {{-- LLM output is untrusted: raw HTML is stripped and unsafe links dropped before rendering. --}}
+                                <div class="chat-bubble chat-md">{!! \Illuminate\Support\Str::markdown($message->isi, ['html_input' => 'strip', 'allow_unsafe_links' => false]) !!}</div>
                             @endif
                             @foreach($message->toolCalls as $toolCall)
                                 <div class="mt-2 rounded-lg border border-slate-700 bg-slate-900/60 p-3 text-xs">
