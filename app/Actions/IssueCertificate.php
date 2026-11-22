@@ -22,7 +22,7 @@ class IssueCertificate
         $error = match (true) {
             $scan->retest_of_id === null => 'Sertifikat hanya untuk scan re-test.',
             $scan->status !== Scan::COMPLETED => 'Scan re-test belum selesai.',
-            $scan->findings()->where('status', Finding::OPEN)->exists() => 'Masih ada finding berstatus open.',
+            $scan->findings()->whereIn('status', [Finding::OPEN, Finding::CONFIRMED])->exists() => 'Masih ada finding berstatus open atau confirmed.',
             $scan->certificate()->exists() => 'Scan ini sudah punya sertifikat.',
             default => null,
         };

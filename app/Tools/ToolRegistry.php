@@ -36,6 +36,14 @@ class ToolRegistry
         ], $this->tools));
     }
 
+    /**
+     * @return array<string, Tool> keyed by tool name
+     */
+    public function all(): array
+    {
+        return $this->tools;
+    }
+
     public function get(string $name): Tool
     {
         // The name is chosen by the LLM, so only whitelisted tools may run.

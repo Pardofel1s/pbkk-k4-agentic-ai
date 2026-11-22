@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 
-#[Fillable(['scan_id', 'tool_id', 'loggable_id', 'loggable_type', 'parameter', 'hasil', 'status', 'error_msg'])]
+#[Fillable(['chat_message_id', 'scan_id', 'tool_id', 'loggable_id', 'loggable_type', 'parameter', 'hasil', 'status', 'error_msg'])]
 class ToolCall extends Model
 {
     /** @use HasFactory<ToolCallFactory> */

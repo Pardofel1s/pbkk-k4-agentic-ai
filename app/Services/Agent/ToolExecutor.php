@@ -40,13 +40,15 @@ class ToolExecutor
     /**
      * An unknown tool name is only written to the Laravel log, because
      * `tool_calls.tool_id` must point at a real tool.
+     *
+     * $parent is the agent message that asked for the tool; a scan (RunScan) has none.
      */
-    public function execute(LlmToolCall $call, ChatMessage $parent, ToolContext $context): string
+    public function execute(LlmToolCall $call, ?ChatMessage $parent, ToolContext $context): string
     {
         try {
             $tool = $this->tools->get($call->name);
         } catch (InvalidArgumentException) {
-            Log::warning('LLM requested an unknown tool.', ['tool' => $call->name, 'chat_message_id' => $parent->id]);
+            Log::warning('LLM requested an unknown tool.', ['tool' => $call->name, 'chat_message_id' => $parent?->id]);
 
             return "Error: unknown tool [{$call->name}].";
         }
@@ -79,9 +81,10 @@ class ToolExecutor
         return $output;
     }
 
-    private function startLog(LlmToolCall $call, ChatMessage $parent, ToolContext $context, ToolRecord $record): ToolCallRecord
+    private function startLog(LlmToolCall $call, ?ChatMessage $parent, ToolContext $context, ToolRecord $record): ToolCallRecord
     {
-        $log = $parent->toolCalls()->make([
+        $log = new ToolCallRecord([
+            'chat_message_id' => $parent?->id,
             'tool_id' => $record->id,
             'scan_id' => $context->scan?->id,
             'parameter' => $call->arguments,
