@@ -2,21 +2,12 @@
 
 namespace Database\Seeders;
 
-use App\Models\Certificate;
-use App\Models\ChatMessage;
-use App\Models\ChatSession;
-use App\Models\Comment;
-use App\Models\Finding;
-use App\Models\Report;
-use App\Models\Scan;
 use App\Models\ScanProfile;
 use App\Models\Target;
-use App\Models\TargetScopeRule;
-use App\Models\TargetTestAccount;
 use App\Models\Tool;
-use App\Models\ToolCall;
 use App\Models\User;
-use App\Models\VulnerabilityType;
+use App\Services\Scan\FindingRules;
+use App\Tools\ToolRegistry;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -25,87 +16,47 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database.
+     * Logins, the scan catalogue and the team's own test targets. Scans, findings
+     * and reports are not seeded: they come from running real scans.
      */
     public function run(): void
     {
         $this->call(RolesAndAdminSeeder::class);
 
         // Dev logins (password: "password"); the admin comes from ADMIN_* in .env.
-        $analyst = User::factory()->create(['name' => 'Analyst', 'email' => 'analyst@example.com'])
-            ->assignRole('analyst');
-        $client = User::factory()->create(['name' => 'Client PT XXX', 'email' => 'client@example.com'])
-            ->assignRole('client');
+        User::factory()->create(['name' => 'Analyst', 'email' => 'analyst@example.com'])->assignRole('analyst');
+        $client = User::factory()->create(['name' => 'Client PT XXX', 'email' => 'client@example.com'])->assignRole('client');
 
-        $types = VulnerabilityType::factory(5)->create();
-        $profiles = ScanProfile::factory(3)->create();
-        $tools = Tool::factory(3)->create();
+        foreach (app(ToolRegistry::class)->all() as $tool) {
+            Tool::query()->firstOrCreate(['nama' => $tool->name()], ['deskripsi' => $tool->description(), 'status' => true]);
+        }
 
-        $targets = Target::factory(2)
-            ->for($client)
-            ->state(['status_verifikasi' => Target::VERIFIED])
-            ->has(TargetScopeRule::factory(2))
-            ->has(TargetTestAccount::factory(2))
-            ->create();
+        $rules = app(FindingRules::class);
+        foreach (array_keys(FindingRules::TYPES) as $slug) {
+            $rules->type($slug);
+        }
+
+        foreach ([
+            ['Baseline Web', 'quick', 'Header keamanan dan atribut cookie. Cepat dan aman untuk pemeriksaan awal.', ['check_security_headers', 'check_cookie_flags']],
+            ['Web Lengkap', 'full', 'Baseline ditambah token CSRF pada form dan probe reflected XSS.', ['check_security_headers', 'check_cookie_flags', 'check_csrf_token', 'test_reflected_xss']],
+            ['Port Discovery', 'quick', 'Pemetaan port TCP umum dengan nmap (nmap harus terpasang di server).', ['scan_open_ports']],
+        ] as [$nama, $tipe, $deskripsi, $tools]) {
+            ScanProfile::query()->create(['nama' => $nama, 'tipe' => $tipe, 'deskripsi' => $deskripsi, 'pengaturan' => ['tools' => $tools]]);
+        }
 
         // Team-owned deployments we may test; their hosts must also be in LLM_TOOL_ALLOWED_HOSTS.
+        // The local app is seeded last so /agent picks it as the default target.
         foreach ([
-            'SchemaCrypt (demo)' => 'https://sch-schemacrypt.vercel.app',
-            'Cloudflare Tunnel (demo)' => 'https://female-dat-economy-characteristics.trycloudflare.com',
+            'SchemaCrypt' => 'https://sch-schemacrypt.vercel.app',
+            'Cloudflare Tunnel App' => 'https://female-dat-economy-characteristics.trycloudflare.com',
+            'Jejaksa Local' => 'http://localhost:8000',
         ] as $nama => $baseUrl) {
             Target::factory()->for($client)->create([
                 'nama' => $nama,
                 'base_url' => $baseUrl,
-                'lingkungan' => 'production',
+                'lingkungan' => 'staging',
                 'status_verifikasi' => Target::VERIFIED,
             ]);
-        }
-
-        // Live demo target: the running app itself, so the agent's tools reach a real host on the allowlist.
-        // Seeded last so /agent picks it as the default target.
-        Target::factory()->for($client)->create([
-            'nama' => 'Jejaksa Local (demo)',
-            'base_url' => 'http://localhost:8000',
-            'lingkungan' => 'staging',
-            'status_verifikasi' => Target::VERIFIED,
-        ]);
-
-        $findings = collect();
-
-        foreach ($targets as $target) {
-            $scan = Scan::factory()->for($target)->for($profiles->random())->create();
-            $findings->push(...Finding::factory(3)->for($scan)
-                ->state(fn () => ['vulnerability_type_id' => $types->random()->id])
-                ->create());
-            Report::factory()->for($scan)->create();
-
-            $retest = Scan::factory()->for($target)->for($profiles->random())
-                ->create(['retest_of_id' => $scan->id]);
-            Certificate::factory()->for($retest)->create();
-        }
-
-        $discussed = $findings->first();
-        Comment::factory()->for($client)->for($discussed, 'commentable')
-            ->create(['isi' => 'Sudah kami patch di staging, mohon re-test.']);
-        Comment::factory()->for($analyst)->for($discussed, 'commentable')
-            ->create(['isi' => 'Siap, re-test dijadwalkan.']);
-
-        ChatSession::factory(3)
-            ->for($analyst)
-            ->has(ChatMessage::factory(4))
-            ->create();
-
-        foreach (ChatMessage::all() as $message) {
-            $finding = $findings->random();
-
-            ToolCall::factory()
-                ->for($message)
-                ->for($tools->random())
-                ->create([
-                    'scan_id' => $finding->scan_id,
-                    'loggable_type' => $finding->getMorphClass(),
-                    'loggable_id' => $finding->id,
-                ]);
         }
     }
 }

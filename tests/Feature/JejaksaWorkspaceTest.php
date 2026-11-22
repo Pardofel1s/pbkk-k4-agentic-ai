@@ -1,130 +1,233 @@
 <?php
 
-use App\Livewire\DemoWorkspace;
+use App\Jobs\RunScan;
+use App\Models\Comment;
+use App\Models\Finding;
+use App\Models\Report;
+use App\Models\Scan;
+use App\Models\ScanProfile;
+use App\Models\Target;
+use App\Models\Tool;
 use App\Models\User;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Volt\Volt;
 
+function workspaceUser(string $role): User
+{
+    return User::factory()->create()->assignRole($role);
+}
+
+/**
+ * A client's verified target with one completed scan, one finding and one report.
+ *
+ * @return array{client: User, target: Target, scan: Scan, finding: Finding, report: Report}
+ */
+function workspaceFixture(): array
+{
+    Storage::fake('local');
+    $client = workspaceUser('client');
+    $target = Target::factory()->for($client)->create(['status_verifikasi' => Target::VERIFIED, 'base_url' => 'http://localhost:8000']);
+    $scan = Scan::factory()->for($target)->for(ScanProfile::factory()->state(['pengaturan' => ['tools' => ['check_security_headers']]]))->create(['status' => Scan::COMPLETED]);
+    $finding = Finding::factory()->for($scan)->create(['status' => Finding::OPEN, 'url_terdampak' => 'http://localhost:8000/']);
+    $report = app(App\Actions\GenerateReport::class)->handle(workspaceUser('analyst'), $scan);
+
+    return compact('client', 'target', 'scan', 'finding', 'report');
+}
+
 test('landing is public and private workspace routes require authentication', function () {
-    $this->get('/')->assertOk()->assertSee('Setiap celah,')->assertSee('data simulasi');
-    foreach (['dashboard','targets','scans/create','findings','chat','reports','certificates','settings','tools','users'] as $path) {
+    $this->get('/')->assertOk()->assertSee('Setiap celah,')->assertDontSee('data simulasi');
+    foreach (['dashboard', 'targets', 'scans/create', 'findings', 'reports', 'certificates', 'settings', 'tools', 'users', 'agent'] as $path) {
         $this->get('/'.$path)->assertRedirect('/login');
     }
 });
 
-test('all workspace pages and detail views render for authenticated users', function () {
-    $this->actingAs(User::factory()->create());
-    foreach (['dashboard','targets','targets/create','targets/t1','scans','scans/create','scans/s1','findings','findings/f1','chat','chat/c1','reports','reports/r1','certificates','scan-profiles','tools','vulnerability-types','users','settings','executions/s1','profile'] as $path) {
-        $this->get('/'.$path)->assertOk()->assertSee('Mode demo');
+test('every workspace page renders real data for each role without demo placeholders', function () {
+    ['client' => $client, 'target' => $target, 'scan' => $scan, 'finding' => $finding, 'report' => $report] = workspaceFixture();
+    $admin = User::query()->firstWhere('email', config('auth.admin.email'));
+
+    $pages = ['dashboard', 'targets', "targets/{$target->id}", 'scans', "scans/{$scan->id}", 'findings', "findings/{$finding->id}",
+        'reports', "reports/{$report->id}", 'certificates', 'vulnerability-types', 'users', 'settings', 'profile'];
+
+    foreach ([[workspaceUser('analyst'), [...$pages, 'scans/create', 'scan-profiles', 'tools', "executions/{$scan->id}", 'agent']],
+        [$admin, [...$pages, 'targets/create', 'scan-profiles', 'tools', "executions/{$scan->id}"]],
+        [$client, [...$pages, 'targets/create']]] as [$user, $paths]) {
+        $this->actingAs($user);
+        foreach ($paths as $path) {
+            $this->get('/'.$path)->assertOk()->assertDontSee('Mode demo')->assertDontSee('simulasi')->assertDontSee('CONTOH');
+        }
     }
-    $this->get('/targets/unknown')->assertNotFound();
+
+    $this->actingAs(workspaceUser('analyst'))->get('/targets/'.$target->id)->assertSee($target->base_url);
+    $this->get('/targets/999999')->assertNotFound();
+    $this->get('/targets/abc')->assertNotFound();
 });
 
-test('target creation validates input and persists escaped data only in the current users demo session', function () {
-    $first = User::factory()->create();
-    $second = User::factory()->create();
-    $this->actingAs($first);
-    Http::preventStrayRequests();
-    Bus::fake();
+test('clients only reach their own records and cannot run scans or see tool output', function () {
+    ['scan' => $scan, 'finding' => $finding, 'report' => $report, 'target' => $target] = workspaceFixture();
+    $this->actingAs(workspaceUser('client'));
+
+    foreach (["targets/{$target->id}", "scans/{$scan->id}", "findings/{$finding->id}", "reports/{$report->id}"] as $path) {
+        $this->get('/'.$path)->assertForbidden();
+    }
+    $this->get('/scans/create')->assertForbidden();
+    $this->get("/executions/{$scan->id}")->assertForbidden();
+    $this->get('/targets')->assertOk()->assertDontSee($target->nama);
+});
+
+test('/chat now points to the live agent', function () {
+    $this->actingAs(workspaceUser('analyst'));
+    $this->get('/chat')->assertRedirect('/agent');
+    $this->get('/chat/1')->assertRedirect('/agent');
+});
+
+test('clients register pending targets with scope rules; html is escaped and bad patterns are refused', function () {
+    $client = workspaceUser('client');
+    $this->actingAs($client);
+
     Volt::test('pages.workspace', ['area' => 'target-create'])
-        ->set('targetForm.url', 'javascript:alert(1)')->call('saveTarget')->assertHasErrors(['targetForm.name','targetForm.url']);
+        ->set('targetForm.base_url', 'javascript:alert(1)')->call('saveTarget')->assertHasErrors(['targetForm.nama', 'targetForm.base_url']);
     Volt::test('pages.workspace', ['area' => 'target-create'])
-        ->set('targetForm.name', '<script>alert(1)</script>')
-        ->set('targetForm.url', 'https://private.example.test')
-        ->set('targetForm.authorized', true)->call('saveTarget')->assertHasNoErrors();
-    expect(DemoWorkspace::read()['targets'])->toHaveCount(4);
+        ->set('targetForm', ['nama' => 'X', 'base_url' => 'https://app.test', 'lingkungan' => 'staging', 'include' => 'evil host!', 'exclude' => ''])
+        ->call('saveTarget')->assertHasErrors('targetForm.include');
+    Volt::test('pages.workspace', ['area' => 'target-create'])
+        ->set('targetForm', ['nama' => '<script>alert(1)</script>', 'base_url' => 'https://app.test/', 'lingkungan' => 'uat', 'include' => "api.app.test\n*.cdn.app.test", 'exclude' => 'pay.app.test'])
+        ->call('saveTarget')->assertHasNoErrors()->assertRedirect();
+
+    $target = $client->targets()->with('targetScopeRules')->sole();
+    expect($target->status_verifikasi)->toBe(Target::PENDING)
+        ->and($target->base_url)->toBe('https://app.test')
+        ->and($target->targetScopeRules->pluck('tipe', 'pola_domain')->all())->toBe(['api.app.test' => 'include', '*.cdn.app.test' => 'include', 'pay.app.test' => 'exclude']);
     $this->get('/targets')->assertSee('&lt;script&gt;alert(1)&lt;/script&gt;', false)->assertDontSee('<script>alert(1)</script>', false);
-    $this->actingAs($second);
-    expect(DemoWorkspace::read()['targets'])->toHaveCount(3);
-    Http::assertNothingSent();
-    Bus::assertNothingDispatched();
+
+    $this->actingAs(workspaceUser('analyst'));
+    Volt::test('pages.workspace', ['area' => 'target-create'])->assertForbidden();
 });
 
-test('scan wizard requires valid target permission and acknowledgement and never executes external work', function () {
-    $this->actingAs(User::factory()->create());
-    Http::preventStrayRequests();
+test('admin verifies a target, which then locks it for the client', function () {
+    $client = workspaceUser('client');
+    $target = Target::factory()->for($client)->create(['status_verifikasi' => Target::PENDING]);
+
+    $this->actingAs(User::query()->firstWhere('email', config('auth.admin.email')));
+    Volt::test('pages.workspace', ['area' => 'targets', 'record' => (string) $target->id])->call('verifyTarget', Target::VERIFIED);
+    expect($target->fresh()->status_verifikasi)->toBe(Target::VERIFIED);
+
+    $this->actingAs($client);
+    Volt::test('pages.workspace', ['area' => 'targets', 'record' => (string) $target->id])
+        ->set('targetForm.nama', 'Diubah')->call('saveTarget')->assertForbidden();
+    Volt::test('pages.workspace', ['area' => 'targets', 'record' => (string) $target->id])->call('verifyTarget', Target::PENDING)->assertForbidden();
+});
+
+test('test account passwords are stored encrypted and never rendered', function () {
+    $client = workspaceUser('client');
+    $target = Target::factory()->for($client)->create(['status_verifikasi' => Target::PENDING]);
+    $this->actingAs($client);
+
+    Volt::test('pages.workspace', ['area' => 'targets', 'record' => (string) $target->id])
+        ->set('accountForm', ['label_role' => 'nasabah', 'username' => 'budi', 'password' => 'Rahasia#123'])
+        ->call('addAccount')->assertHasNoErrors();
+
+    expect(Illuminate\Support\Facades\DB::table('target_test_accounts')->value('encrypted_password'))->not->toContain('Rahasia#123');
+    $this->get("/targets/{$target->id}?tab=accounts")->assertSee('budi')->assertDontSee('Rahasia#123');
+});
+
+test('the scan wizard queues a real scan only on verified targets after acknowledgement', function () {
     Bus::fake();
-    $component = Volt::test('pages.workspace', ['area' => 'scan-create']);
-    $component->call('startScan')->assertHasErrors(['acknowledged']);
-    $component->set('acknowledged', true)->set('targetId', 't3')->call('startScan')->assertHasErrors(['targetId']);
-    $component->set('targetId', 'missing')->call('startScan')->assertHasErrors(['targetId']);
-    $component->set('targetId', 't1')->set('account', 'unassigned-user')->call('startScan')->assertHasErrors(['account']);
-    $component->set('account', '')->call('startScan')->assertHasNoErrors();
-    $component->call('startScan')->assertHasNoErrors();
-    $scans = DemoWorkspace::read()['scans'];
-    expect($scans)->toHaveCount(4);
-    $new = end($scans);
-    expect($new['status'])->toBe('queued')->and($new['scope'])->toBe('/');
-    Http::assertNothingSent();
-    Bus::assertNothingDispatched();
+    $analyst = workspaceUser('analyst');
+    $pending = Target::factory()->create(['status_verifikasi' => Target::PENDING]);
+    $target = Target::factory()->create(['status_verifikasi' => Target::VERIFIED]);
+    $profile = ScanProfile::factory()->create(['pengaturan' => ['tools' => ['check_security_headers']]]);
+    $this->actingAs($analyst);
+
+    $wizard = Volt::test('pages.workspace', ['area' => 'scan-create']);
+    $wizard->set('targetId', $pending->id)->call('nextStep')->assertHasErrors('targetId');
+    $wizard->set('targetId', $target->id)->set('profileId', $profile->id)->call('startScan')->assertHasErrors('acknowledged');
+    $wizard->set('acknowledged', true)->call('startScan')->assertHasNoErrors()->assertRedirect();
+
+    $scan = Scan::query()->sole();
+    expect($scan->target_id)->toBe($target->id)->and($scan->status)->toBe(Scan::QUEUED);
+    Bus::assertDispatched(RunScan::class);
 });
 
-test('cancellation remains requested until the demo confirmation and retries create a separate scan', function () {
-    $this->actingAs(User::factory()->create());
-    $component = Volt::test('pages.workspace', ['area' => 'scans','record' => 's2']);
-    $component->call('cancelScan')->assertHasNoErrors();
-    expect(DemoWorkspace::find('scans', 's2')['status'])->toBe('cancel_requested');
-    $component->call('advanceScan');
-    expect(DemoWorkspace::find('scans', 's2')['status'])->toBe('cancelled');
-    $component->call('retryScan');
-    expect(DemoWorkspace::read()['scans'])->toHaveCount(4);
-    expect(DemoWorkspace::find('scans', 's2')['status'])->toBe('cancelled');
+test('analysts cancel running scans and re-test completed ones', function () {
+    Bus::fake();
+    ['scan' => $scan] = workspaceFixture();
+    $running = Scan::factory()->for($scan->target)->for($scan->scanProfile)->create(['status' => Scan::RUNNING]);
+    $this->actingAs(workspaceUser('analyst'));
+
+    Volt::test('pages.workspace', ['area' => 'scans', 'record' => (string) $running->id])->call('cancelScan');
+    expect($running->fresh()->status)->toBe(Scan::CANCELLED);
+
+    Volt::test('pages.workspace', ['area' => 'scans', 'record' => (string) $scan->id])->call('retryScan')->assertRedirect();
+    expect(Scan::query()->latest('id')->first()->retest_of_id)->toBe($scan->id);
 });
 
-test('failed simulations can be retried without overwriting the original attempt', function () {
-    $this->actingAs(User::factory()->create());
-    $component = Volt::test('pages.workspace', ['area' => 'scans', 'record' => 's2']);
-    $component->call('failScan');
-    expect(DemoWorkspace::find('scans', 's2')['status'])->toBe('failed');
-    $component->call('retryScan');
-    expect(DemoWorkspace::read()['scans'])->toHaveCount(4);
-    expect(DemoWorkspace::find('scans', 's2')['status'])->toBe('failed');
+test('analysts review findings, clients comment, and fixed is left to re-tests', function () {
+    ['client' => $client, 'finding' => $finding] = workspaceFixture();
+    $analyst = workspaceUser('analyst');
+
+    $this->actingAs($analyst);
+    Volt::test('pages.workspace', ['area' => 'findings', 'record' => (string) $finding->id])
+        ->set('reviewStatus', Finding::FIXED)->call('saveReview')->assertHasErrors('reviewStatus')
+        ->set('reviewStatus', Finding::CONFIRMED)->call('saveReview')->assertHasNoErrors();
+    expect($finding->fresh()->status)->toBe(Finding::CONFIRMED);
+
+    $this->actingAs($client);
+    Volt::test('pages.workspace', ['area' => 'findings', 'record' => (string) $finding->id])
+        ->set('reviewStatus', Finding::FALSE_POSITIVE)->call('saveReview')->assertForbidden();
+    Volt::test('pages.workspace', ['area' => 'findings', 'record' => (string) $finding->id])
+        ->set('comment', 'Sudah kami **patch** <script>x</script>')->call('addComment')->assertHasNoErrors();
+
+    $comment = Comment::query()->sole();
+    expect($comment->user_id)->toBe($client->id);
+    $this->get("/findings/{$finding->id}")->assertSee('<strong>patch</strong>', false)->assertDontSee('<script>x</script>', false);
 });
 
-test('review requires reasons and cannot claim resolution without verified retest', function () {
-    $this->actingAs(User::factory()->create());
-    $component = Volt::test('pages.workspace', ['area' => 'findings','record' => 'f1']);
-    $component->set('reviewStatus', 'false_positive')->call('saveReview')->assertHasErrors(['reviewNote']);
-    $component->set('reviewNote', 'Pemeriksaan bukti contoh telah ditinjau.')->call('saveReview')->assertHasNoErrors();
-    expect(DemoWorkspace::find('findings', 'f1')['status'])->toBe('false_positive');
-    $component->set('reviewStatus', 'resolved')->call('saveReview')->assertHasErrors(['reviewStatus']);
-    expect(DemoWorkspace::find('findings', 'f1')['status'])->toBe('false_positive');
-    $component->set('reviewStatus', 'fixed_pending_retest')->call('saveReview')->call('retestFinding');
-    $scans = DemoWorkspace::read()['scans'];
-    expect(end($scans))->toMatchArray(['retest_of' => 's1', 'finding_source' => 'f1', 'status' => 'queued']);
-    expect(DemoWorkspace::find('findings', 'f1')['status'])->toBe('fixed_pending_retest');
+test('reports get new versions and download as the stored html snapshot', function () {
+    ['scan' => $scan, 'report' => $report, 'client' => $client] = workspaceFixture();
+    $this->actingAs(workspaceUser('analyst'));
+
+    Volt::test('pages.workspace', ['area' => 'reports', 'record' => (string) $report->id])->call('generateReport')->assertRedirect();
+    expect($scan->reports()->max('versi'))->toBe(2);
+
+    $this->actingAs($client);
+    Volt::test('pages.workspace', ['area' => 'reports', 'record' => (string) $report->id])
+        ->call('downloadReport')->assertFileDownloaded("jejaksa-scan-{$scan->id}-v1.html");
+    Volt::test('pages.workspace', ['area' => 'reports', 'record' => (string) $report->id])->call('generateReport')->assertForbidden();
 });
 
-test('report versions preserve snapshots and export clearly marked escaped demo HTML', function () {
-    $this->actingAs(User::factory()->create());
-    Volt::test('pages.workspace', ['area' => 'scans','record' => 's2'])->call('generateReport', 's2')->assertHasErrors(['report']);
-    $original = DemoWorkspace::find('reports', 'r1')['findings_snapshot'];
-    Volt::test('pages.workspace', ['area' => 'findings','record' => 'f1'])
-        ->set('reviewStatus', 'confirmed')->set('reviewNote', 'Contoh alasan review yang valid.')->call('saveReview');
-    expect(DemoWorkspace::find('reports', 'r1')['findings_snapshot'])->toBe($original);
-    Volt::test('pages.workspace', ['area' => 'scans','record' => 's1'])->call('generateReport', 's1')->assertHasNoErrors();
-    $reports = DemoWorkspace::read()['reports'];
-    expect($reports)->toHaveCount(2)->and(end($reports)['version'])->toBe(2);
-    Volt::test('pages.workspace', ['area' => 'reports','record' => 'r1'])->call('downloadReport')->assertFileDownloaded('jejaksa-demo-r1-v1.html');
-    $this->get('/reports/r1')->assertSee('CONTOH')->assertSee('DATA SIMULASI');
+test('admins issue certificates only for clean re-tests', function () {
+    ['scan' => $scan] = workspaceFixture();
+    $retest = Scan::factory()->for($scan->target)->for($scan->scanProfile)->create(['status' => Scan::COMPLETED, 'retest_of_id' => $scan->id]);
+    $dirty = Scan::factory()->for($scan->target)->for($scan->scanProfile)->create(['status' => Scan::COMPLETED, 'retest_of_id' => $scan->id]);
+    Finding::factory()->for($dirty)->create(['status' => Finding::OPEN]);
+
+    $this->actingAs(User::query()->firstWhere('email', config('auth.admin.email')));
+    Volt::test('pages.workspace', ['area' => 'certificates'])->call('issueCertificate', $dirty->id)->assertHasErrors('scan');
+    Volt::test('pages.workspace', ['area' => 'certificates'])->call('issueCertificate', $retest->id)->assertHasNoErrors();
+    expect($retest->certificate()->exists())->toBeTrue();
+    $this->get('/certificates')->assertSee($retest->certificate->nomor);
+
+    $this->actingAs(workspaceUser('analyst'));
+    Volt::test('pages.workspace', ['area' => 'certificates'])->call('issueCertificate', $dirty->id)->assertForbidden();
 });
 
-test('chat creates only an explicitly approved demo plan and escapes message HTML', function () {
-    $this->actingAs(User::factory()->create());
-    Http::preventStrayRequests();
-    $component = Volt::test('pages.workspace', ['area' => 'chat','record' => 'c1']);
-    $component->set('message', '<img src=x onerror=alert(1)>')->call('sendMessage')->assertHasNoErrors()->assertSee('&lt;img', false);
-    expect(DemoWorkspace::read()['scans'])->toHaveCount(3);
-    $component->call('confirmPlan');
-    expect(DemoWorkspace::read()['scans'])->toHaveCount(4);
-    expect(DemoWorkspace::find('chats', 'c1')['plan'])->toBeFalse();
-    Http::assertNothingSent();
-});
+test('only admins toggle tools and register analysts; analysts create scan profiles', function () {
+    $admin = User::query()->firstWhere('email', config('auth.admin.email'));
+    $this->actingAs($admin);
+    Volt::test('pages.workspace', ['area' => 'tools'])->assertSee('check_security_headers');
+    $tool = Tool::query()->firstWhere('nama', 'check_security_headers');
+    Volt::test('pages.workspace', ['area' => 'tools'])->call('toggleTool', $tool->id);
+    expect($tool->fresh()->status)->toBeFalse();
+    Volt::test('pages.workspace', ['area' => 'users'])
+        ->set('userForm', ['name' => 'Baru', 'email' => 'baru@example.com', 'password' => 'password-123', 'password_confirmation' => 'password-123'])
+        ->call('registerAnalyst')->assertHasNoErrors();
+    expect(User::query()->firstWhere('email', 'baru@example.com')->hasRole('analyst'))->toBeTrue();
 
-test('tool activation never changes readiness and certificate issuance stays unavailable', function () {
-    $this->actingAs(User::factory()->create());
-    Volt::test('pages.workspace', ['area' => 'tools'])->call('toggleTool', 'discovery');
-    expect(DemoWorkspace::find('tools', 'discovery'))->toMatchArray(['active' => true,'ready' => false]);
-    $this->get('/certificates')->assertSee('Penerbitan belum tersedia')->assertSee('CONTOH');
+    $this->actingAs(workspaceUser('analyst'));
+    Volt::test('pages.workspace', ['area' => 'tools'])->call('toggleTool', $tool->id)->assertForbidden();
+    Volt::test('pages.workspace', ['area' => 'scan-profiles'])
+        ->set('profileForm', ['nama' => 'Cepat', 'tipe' => 'quick', 'deskripsi' => '', 'tools' => ['not_a_tool']])->call('saveProfile')->assertHasErrors('profileForm.tools.0')
+        ->set('profileForm.tools', ['check_cookie_flags'])->call('saveProfile')->assertHasNoErrors();
+    expect(ScanProfile::query()->firstWhere('nama', 'Cepat')->pengaturan)->toBe(['tools' => ['check_cookie_flags']]);
 });

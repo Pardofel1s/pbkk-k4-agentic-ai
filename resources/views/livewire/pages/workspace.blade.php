@@ -1,7 +1,28 @@
 <?php
 
-use App\Livewire\DemoWorkspace;
-use Illuminate\Support\Str;
+use App\Actions\AnalyzeReport;
+use App\Actions\CreateTarget;
+use App\Actions\GenerateReport;
+use App\Actions\IssueCertificate;
+use App\Actions\RegisterAnalyst;
+use App\Actions\StartScan;
+use App\Actions\VerifyTarget;
+use App\Models\Certificate;
+use App\Models\Comment;
+use App\Models\Finding;
+use App\Models\Report;
+use App\Models\Scan;
+use App\Models\ScanProfile;
+use App\Models\Target;
+use App\Models\TargetScopeRule;
+use App\Models\Tool;
+use App\Models\User;
+use App\Models\VulnerabilityType;
+use App\Tools\ToolRegistry;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -10,105 +31,338 @@ use Livewire\Volt\Component;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 new #[Layout('layouts.app')] class extends Component {
+    /** Host pattern for scope rules: app.test or *.app.test. */
+    private const HOST_PATTERN = '/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)*$/i';
+
     #[Locked] public string $area = 'dashboard';
     #[Locked] public ?string $record = null;
     #[Url(except: 'overview')] public string $tab = 'overview';
     #[Url(as: 'q', except: '')] public string $search = '';
     #[Url(except: '')] public string $filter = '';
     public string $notice = '';
-    public array $targetForm = ['name' => '','url' => '','environment' => 'Staging','description' => '','scope' => '/','excluded' => '','authorized' => false];
-    public array $accountForm = ['name' => '','role' => 'Nasabah','username' => ''];
-    public array $profileForm = ['name' => '','description' => '','tools' => ['HTTP Headers']];
+    public array $targetForm = ['nama' => '', 'base_url' => '', 'lingkungan' => 'staging', 'include' => '', 'exclude' => ''];
+    public array $accountForm = ['label_role' => 'nasabah', 'username' => '', 'password' => ''];
+    public array $profileForm = ['nama' => '', 'tipe' => 'quick', 'deskripsi' => '', 'tools' => []];
+    public array $userForm = ['name' => '', 'email' => '', 'password' => '', 'password_confirmation' => ''];
     public bool $showProfileForm = false;
     #[Locked] public int $step = 1;
-    #[Locked] public string $requestId = '';
-    public string $targetId = 't1';
-    public string $profileId = 'p1';
-    public string $account = '';
+    public ?int $targetId = null;
+    public ?int $profileId = null;
+    public ?int $accountId = null;
     public bool $acknowledged = false;
-    public string $reviewStatus = 'unreviewed';
-    public string $reviewNote = '';
-    public string $message = '';
+    public string $reviewStatus = Finding::OPEN;
+    public string $comment = '';
 
     public function mount(string $area = 'dashboard', ?string $record = null): void
     {
         $this->area = $area;
         $this->record = $record;
-        $this->requestId = (string) Str::uuid();
+
+        match ($area) {
+            'targets' => Gate::authorize('viewAny', Target::class),
+            'target-create' => Gate::authorize('create', Target::class),
+            'scan-create' => abort_unless(auth()->user()->can('scans.run'), 403),
+            'executions' => abort_unless(auth()->user()->can('targets.view-any'), 403),
+            default => null,
+        };
+
         if ($area === 'scan-create') {
-            $state = DemoWorkspace::read();
-            $candidate = request()->query('target');
-            if (is_string($candidate) && isset($state['targets'][$candidate])) {
-                $this->targetId = $candidate;
-            }
-            $candidate = request()->query('profile');
-            if (is_string($candidate) && isset($state['profiles'][$candidate])) {
-                $this->profileId = $candidate;
-            }
+            $this->targetId = $this->scannableTargets()->whereKey(request()->integer('target'))->value('id')
+                ?? $this->scannableTargets()->value('id');
+            $this->profileId = ScanProfile::query()->whereKey(request()->integer('profile'))->value('id')
+                ?? ScanProfile::query()->value('id');
         }
-        if ($record) {
-            $collection = ['targets' => 'targets','scans' => 'scans','findings' => 'findings','reports' => 'reports','chat' => 'chats','executions' => 'scans'][$area] ?? abort(404);
-            $item = DemoWorkspace::find($collection, $record);
-            if ($area === 'targets') {
-                $this->targetForm = array_intersect_key($item, $this->targetForm);
-            }
-            if ($area === 'findings') {
-                $this->reviewStatus = $item['status'];
-                $this->reviewNote = $item['note'];
-            }
+
+        $item = $this->item();
+
+        if ($item instanceof Target) {
+            $this->targetForm = [
+                'nama' => $item->nama,
+                'base_url' => $item->base_url,
+                'lingkungan' => $item->lingkungan,
+                'include' => $item->targetScopeRules->where('tipe', 'include')->pluck('pola_domain')->implode("\n"),
+                'exclude' => $item->targetScopeRules->where('tipe', 'exclude')->pluck('pola_domain')->implode("\n"),
+            ];
         }
+
+        if ($item instanceof Finding) {
+            $this->reviewStatus = $item->status;
+        }
+    }
+
+    /**
+     * The record of a detail page, authorised for viewing. Missing ids are 404, foreign ones 403.
+     */
+    private function item(): ?Model
+    {
+        if ($this->record === null) {
+            return null;
+        }
+
+        abort_unless(ctype_digit($this->record), 404);
+
+        $item = match ($this->area) {
+            'targets' => Target::query()->with(['targetScopeRules', 'targetTestAccounts', 'user'])->find($this->record),
+            'scans', 'executions' => Scan::query()->with(['target', 'scanProfile', 'targetTestAccount', 'retestOf', 'certificate'])->find($this->record),
+            'findings' => Finding::query()->with(['scan.target', 'vulnerabilityType'])->find($this->record),
+            'reports' => Report::query()->with(['scan.target', 'scan.scanProfile'])->find($this->record),
+            default => abort(404),
+        };
+
+        abort_if($item === null, 404);
+        Gate::authorize('view', $item);
+
+        return $item;
     }
 
     public function with(): array
     {
-        $state = DemoWorkspace::read();
-        $collection = ['targets' => 'targets','scans' => 'scans','findings' => 'findings','reports' => 'reports','chat' => 'chats','executions' => 'scans'][$this->area] ?? null;
-        $item = $this->record && $collection ? DemoWorkspace::find($collection, $this->record) : null;
-        return ['state' => $state,'item' => $item];
+        $item = $this->item();
+
+        return ['item' => $item, ...match ($this->area) {
+            'dashboard' => $this->dashboardData(),
+            'targets' => $item ? $this->targetData($item) : ['targets' => $this->visibleTargets()
+                ->withCount('targetTestAccounts')
+                ->where(fn (Builder $q) => $q->where('nama', 'like', "%{$this->search}%")->orWhere('base_url', 'like', "%{$this->search}%"))
+                ->latest('id')->get()],
+            'scans' => $item ? $this->scanData($item) : ['scans' => $this->visibleScans()
+                ->when($this->filter !== '', fn (Builder $q) => $q->where('status', $this->filter))
+                ->when($this->search !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
+                    ->whereKey((int) ltrim($this->search, '#'))
+                    ->orWhereHas('target', fn (Builder $t) => $t->where('nama', 'like', "%{$this->search}%"))))
+                ->latest('id')->get()],
+            'scan-create' => $this->wizardData(),
+            'findings' => $item ? ['comments' => $item->comments()->with('user')->oldest('id')->get()] : ['findings' => $this->visibleFindings()
+                ->when($this->filter !== '', fn (Builder $q) => $q->where('severity', $this->filter))
+                ->when($this->search !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
+                    ->where('url_terdampak', 'like', "%{$this->search}%")
+                    ->orWhereHas('vulnerabilityType', fn (Builder $t) => $t->where('nama', 'like', "%{$this->search}%")->orWhere('kode_cwe', 'like', "%{$this->search}%"))))
+                ->latest('id')->get()],
+            'reports' => $item ? $this->reportData($item) : ['reports' => Report::query()
+                ->with('scan.target')
+                ->whereHas('scan', fn (Builder $q) => $q->whereIn('target_id', $this->visibleTargets()->select('id')))
+                ->when($this->search !== '', fn (Builder $q) => $q->whereHas('scan.target', fn (Builder $t) => $t->where('nama', 'like', "%{$this->search}%")))
+                ->latest('id')->get()],
+            'executions' => ['toolCalls' => $item->toolCalls()->with('tool')->oldest('id')->get()],
+            'certificates' => $this->certificateData(),
+            'scan-profiles' => ['profiles' => ScanProfile::query()->withCount('scans')->orderBy('nama')->get(), 'toolNames' => array_keys(app(ToolRegistry::class)->all())],
+            'tools' => ['tools' => $this->toolRows()],
+            'vulnerability-types' => ['types' => VulnerabilityType::query()
+                ->withCount(['findings' => fn (Builder $q) => $q->whereIn('scan_id', $this->visibleScans()->select('scans.id'))])
+                ->when($this->search !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q->where('nama', 'like', "%{$this->search}%")
+                    ->orWhere('kode_cwe', 'like', "%{$this->search}%")->orWhere('kategori_owasp', 'like', "%{$this->search}%")))
+                ->orderBy('kategori_owasp')->get()],
+            'users' => ['users' => auth()->user()->can('users.manage') ? User::query()->with('roles')->orderBy('name')->get() : collect()],
+            default => [],
+        }];
     }
 
-    public function saveTarget(): void
+    /** @return Builder<Target> */
+    private function visibleTargets(): Builder
     {
-        $validated = $this->validate([
-            'targetForm.name' => 'required|string|max:100', 'targetForm.url' => ['required','url:http,https','max:255','regex:/^https?:\/\/[^@\s]+$/i'],
-            'targetForm.environment' => ['required',Rule::in(['Staging','Development','Production'])], 'targetForm.description' => 'nullable|string|max:1000',
-            'targetForm.scope' => 'required|string|max:1000', 'targetForm.excluded' => 'nullable|string|max:1000', 'targetForm.authorized' => 'boolean',
-        ])['targetForm'];
-        $state = DemoWorkspace::read();
-        if ($this->record) {
-            DemoWorkspace::find('targets', $this->record);
+        return Target::query()->visibleTo(auth()->user());
+    }
+
+    /** @return Builder<Target> */
+    private function scannableTargets(): Builder
+    {
+        return $this->visibleTargets()->where('status_verifikasi', Target::VERIFIED)->orderBy('nama');
+    }
+
+    /** @return Builder<Scan> */
+    private function visibleScans(): Builder
+    {
+        return Scan::query()->with(['target', 'scanProfile'])->whereIn('target_id', $this->visibleTargets()->select('id'));
+    }
+
+    /** @return Builder<Finding> */
+    private function visibleFindings(): Builder
+    {
+        return Finding::query()->with(['scan.target', 'vulnerabilityType'])->whereIn('scan_id', $this->visibleScans()->select('scans.id'));
+    }
+
+    private function dashboardData(): array
+    {
+        $open = $this->visibleFindings()->whereIn('status', [Finding::OPEN, Finding::CONFIRMED])->get();
+
+        return [
+            'targetCount' => $this->visibleTargets()->count(),
+            'verifiedCount' => $this->visibleTargets()->where('status_verifikasi', Target::VERIFIED)->count(),
+            'activeScans' => $this->visibleScans()->whereIn('status', [Scan::QUEUED, Scan::RUNNING])->count(),
+            'openFindings' => $open,
+            'reportCount' => Report::query()->whereHas('scan', fn (Builder $q) => $q->whereIn('target_id', $this->visibleTargets()->select('id')))->count(),
+            'recentScans' => $this->visibleScans()->latest('id')->take(5)->get(),
+            'pendingTargets' => auth()->user()->can('targets.verify') ? Target::query()->where('status_verifikasi', Target::PENDING)->latest('id')->get() : collect(),
+        ];
+    }
+
+    private function targetData(Target $target): array
+    {
+        return [
+            'scans' => $this->visibleScans()->where('target_id', $target->id)->latest('id')->get(),
+            'reports' => Report::query()->with('scan')->whereHas('scan', fn (Builder $q) => $q->where('target_id', $target->id))->latest('id')->get(),
+        ];
+    }
+
+    private function scanData(Scan $scan): array
+    {
+        return [
+            'findings' => $scan->findings()->with(['scan.target', 'vulnerabilityType'])->get(),
+            'toolCalls' => auth()->user()->can('targets.view-any') ? $scan->toolCalls()->with('tool')->oldest('id')->get() : collect(),
+            'reports' => $scan->reports()->latest('versi')->get(),
+            'retests' => $scan->retests()->latest('id')->get(),
+        ];
+    }
+
+    private function reportData(Report $report): array
+    {
+        return [
+            'findings' => $report->scan->findings()->with('vulnerabilityType')->get(),
+            'comments' => $report->comments()->with('user')->oldest('id')->get(),
+        ];
+    }
+
+    private function wizardData(): array
+    {
+        $target = $this->targetId ? $this->scannableTargets()->with(['targetScopeRules', 'targetTestAccounts'])->find($this->targetId) : null;
+
+        return [
+            'targets' => $this->scannableTargets()->get(),
+            'profiles' => ScanProfile::query()->orderBy('nama')->get(),
+            'selectedTarget' => $target,
+            'selectedProfile' => $this->profileId ? ScanProfile::query()->find($this->profileId) : null,
+        ];
+    }
+
+    private function certificateData(): array
+    {
+        $scans = $this->visibleScans()->whereNotNull('retest_of_id')->where('status', Scan::COMPLETED)
+            ->withCount(['findings as unresolved_count' => fn (Builder $q) => $q->whereIn('status', [Finding::OPEN, Finding::CONFIRMED])])
+            ->with('certificate')->latest('id')->get();
+
+        return [
+            'certificates' => Certificate::query()->with('scan.target')->whereIn('scan_id', $this->visibleScans()->select('scans.id'))->latest('issued_at')->get(),
+            'candidates' => $scans->whereNull('certificate'),
+        ];
+    }
+
+    /**
+     * Catalogue rows for every registered tool, created on first view so the page always matches the code.
+     */
+    private function toolRows()
+    {
+        foreach (app(ToolRegistry::class)->all() as $tool) {
+            Tool::query()->firstOrCreate(['nama' => $tool->name()], ['deskripsi' => $tool->description(), 'status' => true]);
         }
-        $id = $this->record ?? 't'.Str::lower(Str::random(8));
-        $state['targets'][$id] = [...$validated,'id' => $id,'accounts' => $state['targets'][$id]['accounts'] ?? []];
-        DemoWorkspace::write($state);
-        $this->redirectRoute('targets.show', ['record' => $id], navigate:true);
+
+        return Tool::query()->whereIn('nama', array_keys(app(ToolRegistry::class)->all()))->withCount('toolCalls')->orderBy('nama')->get();
+    }
+
+    public function saveTarget(CreateTarget $create): void
+    {
+        $data = $this->validate([
+            'targetForm.nama' => ['required', 'string', 'max:100'],
+            'targetForm.base_url' => ['required', 'url:http,https', 'max:255', 'regex:/^https?:\/\/[^@\s]+$/i'],
+            'targetForm.lingkungan' => ['required', Rule::in(['staging', 'uat'])],
+            'targetForm.include' => ['nullable', 'string', 'max:2000'],
+            'targetForm.exclude' => ['nullable', 'string', 'max:2000'],
+        ])['targetForm'];
+
+        $rules = [];
+        foreach (['include', 'exclude'] as $tipe) {
+            foreach (array_filter(array_map('trim', preg_split('/\R/', (string) $data[$tipe]))) as $pattern) {
+                if (! preg_match(self::HOST_PATTERN, $pattern)) {
+                    $this->addError("targetForm.{$tipe}", "Pola domain tidak valid: {$pattern}");
+
+                    return;
+                }
+                $rules[] = ['pola_domain' => strtolower($pattern), 'tipe' => $tipe];
+            }
+        }
+
+        $fields = ['nama' => $data['nama'], 'base_url' => rtrim($data['base_url'], '/'), 'lingkungan' => $data['lingkungan']];
+
+        if ($this->record) {
+            $target = $this->item();
+            Gate::authorize('update', $target);
+            $target->update($fields);
+        } else {
+            $target = $create->handle(auth()->user(), $fields);
+        }
+
+        $target->targetScopeRules()->delete();
+        $target->targetScopeRules()->createMany($rules);
+
+        $this->redirectRoute('targets.show', ['record' => $target->id], navigate: true);
+    }
+
+    public function deleteTarget(): void
+    {
+        $target = $this->item();
+        Gate::authorize('delete', $target);
+        $target->delete();
+        $this->redirectRoute('targets.index', navigate: true);
+    }
+
+    public function verifyTarget(string $status, VerifyTarget $verify): void
+    {
+        $target = $verify->handle(auth()->user(), $this->item(), $status);
+        $this->notice = "Status verifikasi target sekarang: {$target->status_verifikasi}.";
     }
 
     public function addAccount(): void
     {
-        $validated = $this->validate(['accountForm.name' => 'required|string|max:80','accountForm.role' => ['required',Rule::in(['Nasabah','Mitra','Admin target'])],'accountForm.username' => 'required|string|max:100'])['accountForm'];
-        $state = DemoWorkspace::read();
-        DemoWorkspace::find('targets', $this->record ?? '');
-        $state['targets'][$this->record]['accounts'][] = $validated;
-        DemoWorkspace::write($state);
-        $this->accountForm = ['name' => '','role' => 'Nasabah','username' => ''];
-        $this->notice = 'Metadata akun demo disimpan. Tidak ada kredensial yang disimpan.';
+        $target = $this->item();
+        Gate::authorize('update', $target);
+        $data = $this->validate([
+            'accountForm.label_role' => ['required', Rule::in(['nasabah', 'mitra', 'admin'])],
+            'accountForm.username' => ['required', 'string', 'max:100'],
+            'accountForm.password' => ['required', 'string', 'max:255'],
+        ])['accountForm'];
+
+        $target->targetTestAccounts()->create([
+            'label_role' => $data['label_role'],
+            'username' => $data['username'],
+            'encrypted_password' => $data['password'],
+        ]);
+
+        $this->accountForm = ['label_role' => 'nasabah', 'username' => '', 'password' => ''];
+        $this->notice = 'Akun uji disimpan. Password disimpan terenkripsi dan tidak ditampilkan lagi.';
+    }
+
+    public function deleteAccount(int $id): void
+    {
+        $target = $this->item();
+        Gate::authorize('update', $target);
+        $target->targetTestAccounts()->whereKey($id)->delete();
     }
 
     public function saveProfile(): void
     {
-        $validated = $this->validate(['profileForm.name' => 'required|string|max:80','profileForm.description' => 'nullable|string|max:300','profileForm.tools' => 'required|array|min:1','profileForm.tools.*' => Rule::in(['HTTP Headers','TLS Check','URL Discovery'])])['profileForm'];
-        $state = DemoWorkspace::read();
-        $id = 'p'.Str::lower(Str::random(8));
-        $state['profiles'][$id] = [...$validated,'id' => $id,'active' => true];
-        DemoWorkspace::write($state);
+        abort_unless(auth()->user()->can('scans.run'), 403);
+        $data = $this->validate([
+            'profileForm.nama' => ['required', 'string', 'max:100'],
+            'profileForm.tipe' => ['required', Rule::in(['quick', 'full', 'auth'])],
+            'profileForm.deskripsi' => ['nullable', 'string', 'max:300'],
+            'profileForm.tools' => ['required', 'array', 'min:1'],
+            'profileForm.tools.*' => [Rule::in(array_keys(app(ToolRegistry::class)->all()))],
+        ])['profileForm'];
+
+        ScanProfile::query()->create([
+            'nama' => $data['nama'],
+            'tipe' => $data['tipe'],
+            'deskripsi' => $data['deskripsi'],
+            'pengaturan' => ['tools' => array_values($data['tools'])],
+        ]);
+
+        $this->profileForm = ['nama' => '', 'tipe' => 'quick', 'deskripsi' => '', 'tools' => []];
         $this->showProfileForm = false;
-        $this->notice = 'Profil demo berhasil dibuat.';
+        $this->notice = 'Profil scan dibuat.';
     }
 
     public function nextStep(): void
     {
-        $this->validate(['targetId' => ['required',Rule::in(array_keys(DemoWorkspace::read()['targets']))],'profileId' => ['required',Rule::in(array_keys(DemoWorkspace::read()['profiles']))]]);
+        $this->validateWizard();
         $this->step = min(4, $this->step + 1);
     }
 
@@ -117,189 +371,133 @@ new #[Layout('layouts.app')] class extends Component {
         $this->step = max(1, $this->step - 1);
     }
 
-    public function startScan(): void
+    private function validateWizard(): void
     {
-        $this->validate(['acknowledged' => 'accepted','targetId' => ['required',Rule::in(array_keys(DemoWorkspace::read()['targets']))],'profileId' => ['required',Rule::in(array_keys(DemoWorkspace::read()['profiles']))]]);
-        $target = DemoWorkspace::find('targets', $this->targetId);
-        if (!$target['authorized']) {
-            $this->addError('targetId', 'Target belum memiliki pernyataan izin pengujian.');
-            return;
-        }
-        $profile = DemoWorkspace::find('profiles', $this->profileId);
-        abort_unless($profile['active'], 422);
-        $accounts = array_column($target['accounts'], 'username');
-        if ($this->account !== '' && !in_array($this->account, $accounts, true)) {
-            $this->addError('account', 'Akun tidak tersedia pada target terpilih.');
-            return;
-        }
-        $id = $this->createScan($this->targetId, $this->profileId, 'Wizard demo');
-        $this->redirectRoute('scans.show', ['record' => $id], navigate:true);
+        $this->validate([
+            'targetId' => ['required', Rule::in($this->scannableTargets()->pluck('id')->all())],
+            'profileId' => ['required', Rule::exists(ScanProfile::class, 'id')],
+        ], ['targetId.in' => 'Pilih target yang sudah terverifikasi.']);
     }
 
-    private function createScan(string $target, string $profile, string $source): string
+    public function startScan(StartScan $start): void
     {
-        $state = DemoWorkspace::read();
-        if (isset($state['scan_requests'][$this->requestId])) {
-            return $state['scan_requests'][$this->requestId];
-        }
-        $id = 's'.Str::lower(Str::random(8));
-        $state['scans'][$id] = ['id' => $id,'target' => $target,'profile' => $profile,'status' => 'queued','created' => now()->format('d M Y, H:i'),'progress' => 0,'source' => $source,'account' => $this->account,'scope' => $state['targets'][$target]['scope'],'excluded' => $state['targets'][$target]['excluded']];
-        $state['scan_requests'][$this->requestId] = $id;
-        DemoWorkspace::write($state);
-        return $id;
-    }
+        $this->validateWizard();
+        $this->validate(['acknowledged' => 'accepted']);
 
-    public function failScan(): void
-    {
-        $scan = DemoWorkspace::find('scans', $this->record ?? '');
-        if (!in_array($scan['status'], ['queued', 'running'], true)) {
-            return;
-        }
-        $state = DemoWorkspace::read();
-        $state['scans'][$this->record]['status'] = 'failed';
-        DemoWorkspace::write($state);
-        $this->notice = 'Skenario gagal disimulasikan. Buka percobaan baru melalui Coba ulang; riwayat awal tetap tersimpan.';
-    }
-
-    public function advanceScan(): void
-    {
-        $scan = DemoWorkspace::find('scans', $this->record ?? '');
-        $state = DemoWorkspace::read();
-        $next = ['queued' => 'running','running' => 'completed','cancel_requested' => 'cancelled'][$scan['status']] ?? null;
-        if (!$next) {
-            return;
-        }
-        $state['scans'][$this->record]['status'] = $next;
-        $state['scans'][$this->record]['progress'] = $next === 'completed' ? 100 : ($next === 'running' ? 42 : $scan['progress']);
-        if ($next === 'completed' && !collect($state['findings'])->contains('scan', $this->record)) {
-            $id = 'f'.Str::lower(Str::random(8));
-            $fixture = DemoWorkspace::fixtures()['findings']['f1'];
-            $state['findings'][$id] = [...$fixture,'id' => $id,'scan' => $this->record,'target' => $scan['target'],'location' => $state['targets'][$scan['target']]['url'],'status' => 'unreviewed'];
-        }
-        DemoWorkspace::write($state);
-        $this->notice = 'Status simulasi diperbarui. Tidak ada tool yang dieksekusi.';
+        $scan = $start->handle(auth()->user(), Target::query()->findOrFail($this->targetId), $this->profileId, $this->accountId ?: null);
+        $this->redirectRoute('scans.show', ['record' => $scan->id], navigate: true);
     }
 
     public function cancelScan(): void
     {
-        $scan = DemoWorkspace::find('scans', $this->record ?? '');
-        if (!in_array($scan['status'], ['queued','running'], true)) {
-            return;
+        $scan = $this->item();
+        Gate::authorize('update', $scan);
+
+        if (in_array($scan->status, [Scan::QUEUED, Scan::RUNNING], true)) {
+            $scan->update(['status' => Scan::CANCELLED, 'finished_at' => now()]);
         }
-        $state = DemoWorkspace::read();
-        $state['scans'][$this->record]['status'] = 'cancel_requested';
-        DemoWorkspace::write($state);
     }
 
-    public function retryScan(): void
+    /**
+     * A completed scan is re-tested (closes fixed findings); a failed or cancelled one is simply run again.
+     */
+    public function retryScan(StartScan $start): void
     {
-        $scan = DemoWorkspace::find('scans', $this->record ?? '');
-        if (!in_array($scan['status'], ['failed','cancelled','completed'], true)) {
-            return;
-        }
-        if (!DemoWorkspace::find('targets', $scan['target'])['authorized']) {
-            $this->addError('scan', 'Izin target diperlukan.');
-            return;
-        }
-        $id = $this->createScan($scan['target'], $scan['profile'], 'Retest demo');
-        $this->redirectRoute('scans.show', ['record' => $id], navigate:true);
+        $scan = $this->item();
+        abort_unless(in_array($scan->status, [Scan::COMPLETED, Scan::FAILED, Scan::CANCELLED], true), 422);
+
+        $new = $start->handle(auth()->user(), $scan->target, $scan->scan_profile_id, $scan->target_test_account_id,
+            $scan->status === Scan::COMPLETED ? $scan : $scan->retestOf);
+        $this->redirectRoute('scans.show', ['record' => $new->id], navigate: true);
     }
 
-    public function saveReview(): void
+    public function generateReport(GenerateReport $generate): void
     {
-        $this->validate(['reviewStatus' => ['required',Rule::in(['unreviewed','confirmed','false_positive','fixed_pending_retest','resolved'])],'reviewNote' => 'required|string|min:8|max:2000']);
-        DemoWorkspace::find('findings', $this->record ?? '');
-        if ($this->reviewStatus === 'resolved') {
-            $this->addError('reviewStatus', 'Status terselesaikan memerlukan hasil retest dari backend. Gunakan Menunggu retest pada demo.');
-            return;
-        }
-        $state = DemoWorkspace::read();
-        $state['findings'][$this->record]['status'] = $this->reviewStatus;
-        $state['findings'][$this->record]['note'] = $this->reviewNote;
-        DemoWorkspace::write($state);
-        $this->notice = 'Keputusan review demo tersimpan.';
-    }
-
-    public function retestFinding(): void
-    {
-        $finding = DemoWorkspace::find('findings', $this->record ?? '');
-        $scan = DemoWorkspace::find('scans', $finding['scan']);
-        if (!DemoWorkspace::find('targets', $finding['target'])['authorized']) {
-            $this->addError('scan', 'Izin target diperlukan untuk retest.');
-            return;
-        }
-        $id = $this->createScan($finding['target'], $scan['profile'], 'Retest temuan demo');
-        $state = DemoWorkspace::read();
-        $state['scans'][$id]['retest_of'] = $finding['scan'];
-        $state['scans'][$id]['finding_source'] = $finding['id'];
-        DemoWorkspace::write($state);
-        $this->redirectRoute('scans.show', ['record' => $id], navigate: true);
-    }
-
-    public function generateReport(string $scanId): void
-    {
-        $scan = DemoWorkspace::find('scans', $scanId);
-        if ($scan['status'] !== 'completed') {
-            $this->addError('report', 'Laporan memerlukan pemindaian selesai.');
-            return;
-        }
-        $state = DemoWorkspace::read();
-        $id = 'r'.Str::lower(Str::random(8));
-        $version = collect($state['reports'])->where('scan', $scanId)->max('version') + 1;
-        $state['reports'][$id] = ['id' => $id,'scan' => $scanId,'version' => $version,'created' => now()->format('d M Y, H:i'),'status' => 'draft','target_snapshot' => $state['targets'][$scan['target']],'findings_snapshot' => collect($state['findings'])->where('scan', $scanId)->all()];
-        DemoWorkspace::write($state);
-        $this->redirectRoute('reports.show', ['record' => $id], navigate:true);
+        $scan = $this->item() instanceof Report ? $this->item()->scan : $this->item();
+        $report = $generate->handle(auth()->user(), $scan);
+        $this->redirectRoute('reports.show', ['record' => $report->id], navigate: true);
     }
 
     public function downloadReport(): StreamedResponse
     {
-        $report = DemoWorkspace::find('reports', $this->record ?? '');
-        $html = view('jejaksa.report-export', ['report' => $report,'state' => DemoWorkspace::read()])->render();
-        return response()->streamDownload(function () use ($html): void {
-            echo $html;
-        }, 'jejaksa-demo-'.$report['id'].'-v'.$report['version'].'.html', ['Content-Type' => 'text/html; charset=UTF-8']);
+        $report = $this->item();
+
+        return Storage::disk('local')->download($report->file_path, "jejaksa-scan-{$report->scan_id}-v{$report->versi}.html");
     }
 
-    public function newChat(): void
+    public function analyzeReport(AnalyzeReport $analyze): void
     {
-        $state = DemoWorkspace::read();
-        $id = 'c'.Str::lower(Str::random(8));
-        $state['chats'][$id] = ['id' => $id,'title' => 'Percakapan baru','target' => 't1','messages' => [],'plan' => false];
-        DemoWorkspace::write($state);
-        $this->redirectRoute('chat.show', ['record' => $id], navigate:true);
+        $analyze->handle(auth()->user(), $this->item());
+        $this->notice = 'Analisis AI ditambahkan ke diskusi laporan.';
     }
 
-    public function sendMessage(): void
+    public function saveReview(): void
     {
-        $this->validate(['message' => 'required|string|max:2000']);
-        DemoWorkspace::find('chats', $this->record ?? '');
-        $state = DemoWorkspace::read();
-        $state['chats'][$this->record]['messages'][] = ['role' => 'user','text' => $this->message];
-        $state['chats'][$this->record]['messages'][] = ['role' => 'assistant','text' => 'Respons demo: berikut contoh rencana pemeriksaan header. Rencana ini menggunakan target Fintech Sandbox dan profil Baseline Web. Instruksi Anda tidak dikirim ke LLM. Tinjau scope sebelum mengonfirmasi.'];
-        $state['chats'][$this->record]['plan'] = true;
-        $state['chats'][$this->record]['title'] = Str::limit($this->message, 45);
-        DemoWorkspace::write($state);
-        $this->message = '';
+        $finding = $this->item();
+        Gate::authorize('update', $finding);
+        $this->validate(['reviewStatus' => ['required', Rule::in([Finding::OPEN, Finding::CONFIRMED, Finding::FALSE_POSITIVE])]],
+            ['reviewStatus.in' => 'Status fixed diberikan otomatis oleh re-test yang tidak lagi menemukan celah ini.']);
+
+        $finding->update(['status' => $this->reviewStatus]);
+        $this->notice = 'Status temuan disimpan.';
     }
 
-    public function confirmPlan(): void
+    public function retestFinding(StartScan $start): void
     {
-        $chat = DemoWorkspace::find('chats', $this->record ?? '');
-        abort_unless($chat['plan'] && DemoWorkspace::find('targets', $chat['target'])['authorized'], 422);
-        $state = DemoWorkspace::read();
-        $state['chats'][$this->record]['plan'] = false;
-        DemoWorkspace::write($state);
-        $id = $this->createScan($chat['target'], 'p1', 'Asisten demo');
-        $this->redirectRoute('scans.show', ['record' => $id], navigate:true);
+        $finding = $this->item();
+        $scan = $finding->scan;
+        $new = $start->handle(auth()->user(), $scan->target, $scan->scan_profile_id, $scan->target_test_account_id, $scan);
+        $this->redirectRoute('scans.show', ['record' => $new->id], navigate: true);
     }
 
-    public function toggleTool(string $id): void
+    public function addComment(): void
     {
-        DemoWorkspace::find('tools', $id);
-        $state = DemoWorkspace::read();
-        $state['tools'][$id]['active'] = !$state['tools'][$id]['active'];
-        DemoWorkspace::write($state);
-        $this->notice = 'Preferensi katalog demo diubah. Kesiapan eksekusi tidak berubah.';
+        $commentable = $this->item();
+        Gate::authorize('create', [Comment::class, $commentable]);
+        $this->validate(['comment' => ['required', 'string', 'max:2000']]);
+
+        $comment = $commentable->comments()->make(['isi' => $this->comment]);
+        $comment->user()->associate(auth()->user());
+        $comment->save();
+        $this->comment = '';
+    }
+
+    public function deleteComment(int $id): void
+    {
+        $comment = $this->item()->comments()->findOrFail($id);
+        Gate::authorize('delete', $comment);
+        $comment->delete();
+    }
+
+    public function issueCertificate(int $scanId, IssueCertificate $issue): void
+    {
+        $scan = Scan::query()->findOrFail($scanId);
+        Gate::authorize('view', $scan);
+        $certificate = $issue->handle(auth()->user(), $scan);
+        $this->notice = "Sertifikat {$certificate->nomor} diterbitkan.";
+    }
+
+    public function toggleTool(int $id): void
+    {
+        abort_unless(auth()->user()->can('users.manage'), 403);
+        $tool = Tool::query()->findOrFail($id);
+        $tool->update(['status' => ! $tool->status]);
+        $this->notice = "Tool {$tool->nama} ".($tool->status ? 'diaktifkan.' : 'dinonaktifkan; agent dan scan tidak akan menjalankannya.');
+    }
+
+    public function registerAnalyst(RegisterAnalyst $register): void
+    {
+        $user = $register->handle(auth()->user(), $this->userForm);
+        $this->userForm = ['name' => '', 'email' => '', 'password' => '', 'password_confirmation' => ''];
+        $this->notice = "Analyst {$user->email} didaftarkan.";
+    }
+
+    public function deleteUser(int $id): void
+    {
+        $user = User::query()->findOrFail($id);
+        Gate::authorize('delete', $user);
+        $user->delete();
+        $this->notice = "Pengguna {$user->email} dihapus.";
     }
 }; ?>
 

@@ -4,58 +4,50 @@
         <div class="grid gap-5 sm:grid-cols-2">
             <div class="field">
                 <label for="target-name">Nama target</label>
-                <input id="target-name" wire:model="targetForm.name" required maxlength="100" placeholder="Contoh: Fintech Sandbox">
+                <input id="target-name" wire:model="targetForm.nama" required maxlength="100" placeholder="Contoh: Portal Nasabah Staging">
             </div>
             <div class="field">
                 <label for="environment">Lingkungan</label>
-                <select id="environment" wire:model="targetForm.environment">
-                    <option>Staging</option>
-                    <option>Development</option>
-                    <option>Production</option>
+                <select id="environment" wire:model="targetForm.lingkungan">
+                    <option value="staging">Staging</option>
+                    <option value="uat">UAT</option>
                 </select>
+                <p class="text-xs muted">Hanya staging/UAT: pengujian tidak boleh mengganggu pengguna produksi.</p>
             </div>
             <div class="field sm:col-span-2">
                 <label for="target-url">Base URL</label>
-                <input id="target-url" type="url" wire:model="targetForm.url" required placeholder="https://staging.example.test">
+                <input id="target-url" type="url" wire:model="targetForm.base_url" required placeholder="https://staging.contoh.co.id">
                 <p class="text-xs muted">Gunakan HTTP/HTTPS. Jangan sertakan password atau token di URL.</p>
             </div>
-            <div class="field sm:col-span-2">
-                <label for="description">Deskripsi</label>
-                <textarea id="description" rows="2" wire:model="targetForm.description" maxlength="1000" placeholder="Tujuan dan konteks target ini">
-                </textarea>
+            <div class="field">
+                <label for="scope-include">Domain tambahan dalam scope</label>
+                <textarea id="scope-include" rows="3" class="mono" wire:model="targetForm.include" placeholder="api.contoh.co.id&#10;*.staging.contoh.co.id"></textarea>
+                <p class="text-xs muted">Satu pola per baris. Host base URL selalu termasuk.</p>
             </div>
             <div class="field">
-                <label for="scope">Path dalam scope</label>
-                <textarea id="scope" rows="3" class="mono" wire:model="targetForm.scope" required placeholder="/">
-                </textarea>
-                <p class="text-xs muted">Satu path per baris; / mencakup base URL.</p>
-            </div>
-            <div class="field">
-                <label for="excluded">Path yang dikecualikan</label>
-                <textarea id="excluded" rows="3" class="mono" wire:model="targetForm.excluded" placeholder="/logout&#10;/payments/confirm">
-                </textarea>
+                <label for="scope-exclude">Domain yang dikecualikan</label>
+                <textarea id="scope-exclude" rows="3" class="mono" wire:model="targetForm.exclude" placeholder="payment.contoh.co.id"></textarea>
+                <p class="text-xs muted">Pengecualian selalu menang atas pola dalam scope.</p>
             </div>
         </div>
-        <label class="mt-6 flex items-start gap-3 rounded-lg border border-slate-600 p-4">
-            <input type="checkbox" wire:model="targetForm.authorized" class="mt-1 rounded">
-            <span>
-                <span class="block text-sm">Saya memiliki izin untuk menguji target ini.</span>
-                <span class="mt-1 block text-xs font-normal muted">Pernyataan dicatat hanya untuk simulasi frontend. Target tanpa izin dapat disimpan sebagai draf.</span>
-            </span>
-        </label>
         <div class="mt-7 flex flex-wrap justify-end gap-3 border-t border-slate-700 pt-5">
-            <a class="btn-secondary" href="{{ route('targets.index') }}" wire:navigate>Batal</a>
-            <button class="btn-primary" type="submit" wire:loading.attr="disabled">Simpan target demo<x-jejaksa.icon name="check" size="16" />
-            </button>
+            <a class="btn-secondary" href="{{ $record ? route('targets.show', $record) : route('targets.index') }}" wire:navigate>Batal</a>
+            <button class="btn-primary" type="submit" wire:loading.attr="disabled">Simpan target<x-jejaksa.icon name="check" size="16" /></button>
         </div>
     </div>
     <aside class="space-y-4">
         <div class="info-box">
             <x-jejaksa.icon name="shield" class="mb-3" />
             <h3 class="font-semibold">Scope adalah batas.</h3>
-            <p class="mt-2 leading-6">Masukkan hanya lingkungan yang Anda miliki atau diizinkan untuk diuji. Path yang dikecualikan harus tetap di luar pengujian.</p>
+            <p class="mt-2 leading-6">Tool dan agent AI menolak request ke host di luar scope, termasuk lewat redirect.</p>
         </div>
         <div class="panel p-5 text-xs leading-6 muted">
-            <h3 class="mb-2 font-semibold text-slate-200">Mode demo</h3>URL disimpan sebagai teks. Menyimpan target tidak menghubungi host atau menjalankan scanner.</div>
+            <h3 class="mb-2 font-semibold text-slate-200">Alur verifikasi</h3>
+            @can('targets.verify')
+                Target yang Anda buat sebagai admin langsung terverifikasi.
+            @else
+                Target baru berstatus <strong>menunggu verifikasi</strong>. Setelah admin memverifikasi izin pengujian, target dikunci dan analyst bisa mulai memindai.
+            @endcan
+        </div>
     </aside>
 </form>

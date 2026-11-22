@@ -5,30 +5,22 @@
                 <th>Temuan</th>
                 <th>Risiko</th>
                 <th>Target</th>
-                <th>Review</th>
-                <th>
-                    <span class="sr-only">Buka</span>
-                </th>
+                <th>Status</th>
+                <th><span class="sr-only">Buka</span></th>
             </tr>
         </thead>
         <tbody>
             @forelse($findings as $finding)
                 <tr>
                     <td>
-                        <a class="row-title" href="{{ route('findings.show',$finding['id']) }}" wire:navigate>{{ $finding['title'] }}</a>
-                        <p class="mt-1 text-[10px] muted">{{ strtoupper($finding['id']) }} · {{ $finding['type'] }}</p>
+                        <a class="row-title" href="{{ route('findings.show', $finding) }}" wire:navigate>{{ $finding->vulnerabilityType->nama }}</a>
+                        <p class="mt-1 text-[10px] muted">#{{ $finding->id }} · {{ $finding->vulnerabilityType->kode_cwe }}{{ $finding->parameter ? ' · '.$finding->parameter : '' }}</p>
                     </td>
+                    <td><x-jejaksa.badge :value="$finding->severity" /></td>
+                    <td class="text-xs muted">{{ $finding->scan->target->nama }}</td>
+                    <td><x-jejaksa.badge :value="$finding->status" /></td>
                     <td>
-                        <x-jejaksa.badge :value="$finding['severity']" />
-                    </td>
-                    <td class="text-xs muted">{{ $state['targets'][$finding['target']]['name'] }}</td>
-                    <td>
-                        <x-jejaksa.badge :value="$finding['status']" />
-                    </td>
-                    <td>
-                        <a class="icon-btn" href="{{ route('findings.show',$finding['id']) }}" aria-label="Buka {{ $finding['title'] }}" wire:navigate>
-                            <x-jejaksa.icon name="chevron" size="16" />
-                        </a>
+                        <a class="icon-btn" href="{{ route('findings.show', $finding) }}" aria-label="Buka temuan #{{ $finding->id }}" wire:navigate><x-jejaksa.icon name="chevron" size="16" /></a>
                     </td>
                 </tr>
             @empty
