@@ -40,7 +40,7 @@ new #[Layout('layouts.guest')] class extends Component
 <div>
     <p class="eyebrow mb-3">Mulai jejak Anda</p>
     <h1 class="text-3xl font-semibold tracking-tight">Buat akun Jejaksa.</h1>
-    <p class="mt-3 mb-8 text-sm muted">Siapkan workspace personal untuk mencoba alur demo.</p>
+    <p class="mt-3 mb-8 text-sm muted">Daftar sebagai klien untuk mendaftarkan aplikasi web Anda dan memantau hasil pengujiannya.</p>
     <form wire:submit="register">
         <!-- Name -->
         <div>

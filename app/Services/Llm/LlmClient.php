@@ -247,7 +247,7 @@ class LlmClient
                     $usage = array_replace($usage, $chunk['usage']);
                 }
 
-                // shortcut: a leaked "...</think>" prefix is only stripped from the final response, not from live chunks; buffer the stream if this shows up in demos.
+                // shortcut: a leaked "...</think>" prefix is only stripped from the final response, not from live chunks; buffer the stream if users notice it.
                 if ($text !== '') {
                     $content .= $text;
                     $onChunk($text);

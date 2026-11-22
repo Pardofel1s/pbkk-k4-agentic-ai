@@ -21,7 +21,7 @@ document.addEventListener('alpine:init', () => {
                 : this.elapsed < 7520 ? 3 : this.elapsed < 10000 ? 4 : this.elapsed < 15120 ? 5 : 6;
         },
         get command() {
-            return 'Periksa header target demo.'.slice(0, Math.max(0, Math.floor((this.elapsed - 640) / 68)));
+            return 'Periksa header target saya.'.slice(0, Math.max(0, Math.floor((this.elapsed - 640) / 68)));
         },
         init() {
             if (!('IntersectionObserver' in window)) return;

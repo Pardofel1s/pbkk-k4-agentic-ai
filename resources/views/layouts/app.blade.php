@@ -22,9 +22,8 @@
             <div class="workspace-body" :inert="isMobile && navigationOpen">
                 <header class="topbar">
                     <div class="flex items-center gap-3"><button id="open-workspace-navigation" type="button" class="icon-btn md:hidden" @click="navigationOpen = true; $nextTick(() => document.getElementById('close-workspace-navigation')?.focus())" aria-label="Buka navigasi" :aria-expanded="navigationOpen" aria-controls="workspace-navigation"><x-jejaksa.icon name="menu" /></button><a class="text-sm muted" href="{{ route('dashboard') }}" wire:navigate>Workspace <span class="mx-2 opacity-50">/</span> <span class="text-slate-200">Jejaksa Lab</span></a></div>
-                    <div class="flex items-center gap-4"><a href="{{ route('settings') }}" class="hidden items-center gap-2 text-xs muted lg:flex"><span class="live-dot"></span> Lingkungan demo</a><span class="h-5 border-l border-slate-700"></span><a href="{{ route('profile') }}" aria-label="Profil {{ auth()->user()->name }}" wire:navigate><span class="avatar">{{ mb_strtoupper(mb_substr(auth()->user()->name, 0, 2)) }}</span></a></div>
+                    <div class="flex items-center gap-4"><a href="{{ route('settings') }}" class="hidden items-center gap-2 text-xs muted lg:flex"><span class="live-dot"></span> <span class="capitalize">{{ auth()->user()->getRoleNames()->implode(", ") }}</span></a><span class="h-5 border-l border-slate-700"></span><a href="{{ route('profile') }}" aria-label="Profil {{ auth()->user()->name }}" wire:navigate><span class="avatar">{{ mb_strtoupper(mb_substr(auth()->user()->name, 0, 2)) }}</span></a></div>
                 </header>
-                <div class="demo-strip"><span><strong>Mode demo — data simulasi</strong> <span class="hidden sm:inline">· Agent AI sudah terhubung ke LLM sungguhan.</span></span><span>F0 / Frontend preview</span></div>
                 <main id="main-content" class="workspace-main" tabindex="-1">@if(isset($header))<div class="mb-6">{{ $header }}</div>@endif{{ $slot }}</main>
             </div>
         </div>
