@@ -18,7 +18,15 @@ class Scan extends Model
     use HasFactory;
     use PrunesOrphanComments;
 
+    public const QUEUED = 'queued';
+
+    public const RUNNING = 'running';
+
     public const COMPLETED = 'completed';
+
+    public const FAILED = 'failed';
+
+    public const CANCELLED = 'cancelled';
 
     /**
      * Get the attributes that should be cast.

@@ -19,7 +19,14 @@ class Finding extends Model
 
     public const OPEN = 'open';
 
+    public const CONFIRMED = 'confirmed';
+
+    public const FALSE_POSITIVE = 'false_positive';
+
     public const FIXED = 'fixed';
+
+    /** Statuses an analyst can pick when reviewing; fixed is set by a passing re-test. */
+    public const REVIEW_STATUSES = [self::OPEN, self::CONFIRMED, self::FALSE_POSITIVE, self::FIXED];
 
     /**
      * @return BelongsTo<Scan, $this>
