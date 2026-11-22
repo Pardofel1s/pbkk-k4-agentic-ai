@@ -10,7 +10,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Volt::route('dashboard', 'pages.workspace')->defaults('area', 'dashboard')->name('dashboard');
     Volt::route('targets/create', 'pages.workspace')->defaults('area', 'target-create')->name('targets.create');
     Volt::route('scans/create', 'pages.workspace')->defaults('area', 'scan-create')->name('scans.create');
-    foreach (['targets','scans','findings','reports','chat'] as $area) {
+    foreach (['targets','scans','findings','reports'] as $area) {
         Volt::route($area, 'pages.workspace')->defaults('area', $area)->name($area.'.index');
         Volt::route($area.'/{record}', 'pages.workspace')->defaults('area', $area)->name($area.'.show');
     }
@@ -20,8 +20,10 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Volt::route('executions/{record}', 'pages.workspace')->defaults('area', 'executions')->name('executions.show');
     Volt::route('settings', 'pages.workspace')->defaults('area', 'settings')->name('settings');
 
-    // Live agent chat wired to the real backend (StartAgentTurn + policies), unlike the demo workspace.
+    // The AI assistant: agent chat on StartAgentTurn + policies. /chat stays as an alias.
     Volt::route('agent', 'agent.chat')->name('agent.chat');
+    Route::redirect('chat', '/agent')->name('chat.index');
+    Route::redirect('chat/{record}', '/agent');
 });
 
 Route::view('profile', 'profile')
