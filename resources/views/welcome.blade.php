@@ -36,7 +36,7 @@
                     <div class="preview-chrome">
                         <span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span>
                         <span class="mono">jejaksa / workspace / asisten</span>
-                        <span class="flex items-center gap-2"><span class="live-dot"></span>Demo animasi — data simulasi</span>
+                        <span class="flex items-center gap-2"><span class="live-dot"></span>Ilustrasi alur pengujian</span>
                     </div>
                     <div class="preview-body" aria-hidden="true">
                         <div class="preview-sidebar">
@@ -60,14 +60,14 @@
                                     <x-jejaksa.icon name="sparkles" size="16" class="shrink-0 text-teal-300" />
                                     <span class="preview-command-copy">
                                         <span x-show="stage < 2" x-cloak x-text="command"></span>
-                                        <span x-show="stage >= 2">Periksa header <span :class="{ 'selected-text': stage === 2 && elapsed < 4400 }" x-text="stage === 2 && elapsed < 4400 ? 'target demo' : 'staging.example.test'">staging.example.test</span></span>
+                                        <span x-show="stage >= 2">Periksa header <span :class="{ 'selected-text': stage === 2 && elapsed < 4400 }" x-text="stage === 2 && elapsed < 4400 ? 'target saya' : 'staging.example.test'">staging.example.test</span></span>
                                     </span>
                                     <span x-show="stage < 3" x-cloak class="text-teal-300">|</span>
                                 </div>
                                 <p class="mt-3 text-[10px] muted">Target <span class="ml-2 rounded border border-slate-600 px-2 py-1 text-teal-200">staging.example.test</span></p>
                                 <div class="preview-plan">
-                                    <p class="muted" x-text="stage < 3 ? 'Tinjau rencana sebelum pengujian.' : stage < 5 ? 'Cek scope → Periksa header → Catat bukti' : 'Rencana selesai · 1 bukti simulasi'">Rencana selesai · 1 bukti simulasi</p>
-                                    <span class="preview-plan-action" x-text="stage < 3 ? 'Tinjau rencana' : stage < 4 ? 'Jalankan demo' : stage < 5 ? 'Memeriksa…' : 'Selesai'">Selesai</span>
+                                    <p class="muted" x-text="stage < 3 ? 'Tinjau rencana sebelum pengujian.' : stage < 5 ? 'Cek scope → Periksa header → Catat bukti' : 'Rencana selesai · 1 bukti'">Rencana selesai · 1 bukti</p>
+                                    <span class="preview-plan-action" x-text="stage < 3 ? 'Tinjau rencana' : stage < 4 ? 'Jalankan' : stage < 5 ? 'Memeriksa…' : 'Selesai'">Selesai</span>
                                 </div>
                                 <div class="preview-result-slot">
                                     <div class="preview-result" x-show="stage >= 4 && stage < 6"
@@ -77,7 +77,7 @@
                                             <span class="preview-result-title">Content-Security-Policy belum diatur</span>
                                             <span class="badge badge-warning text-[9px]">Sedang</span>
                                         </div>
-                                        <p class="muted">Bukti simulasi · Respons HTTP 200 tanpa header CSP.</p>
+                                        <p class="muted">Bukti · Respons HTTP 200 tanpa header CSP.</p>
                                         <p class="text-teal-200">Terapkan kebijakan CSP sesuai kebutuhan aplikasi.</p>
                                     </div>
                                 </div>
@@ -95,7 +95,7 @@
                             <span :class="{ current: stage >= 5 }">03 / Bukti</span>
                         </div>
                     </div>
-                    <p class="sr-only">Demo memperlihatkan penulisan instruksi, penggantian target, peninjauan rencana, pemeriksaan header, dan bukti CSP simulasi.</p>
+                    <p class="sr-only">Ilustrasi memperlihatkan penulisan instruksi, pemilihan target, peninjauan rencana, pemeriksaan header, dan bukti CSP.</p>
                 </div>
             </section>
 
@@ -148,11 +148,11 @@
                         <a href="{{ auth()->check() ? route('findings.index') : route('login') }}" class="text-link mt-6 inline-flex items-center gap-2">Lihat workspace<x-jejaksa.icon name="arrow" size="16" /></a>
                     </div>
                     <div class="evidence-card" data-reveal="pop">
-                        <div class="flex items-center justify-between gap-3"><span class="mono text-[11px] muted">FND-001 · Contoh</span><x-jejaksa.badge value="medium" /></div>
+                        <div class="flex items-center justify-between gap-3"><span class="mono text-[11px] muted">FND-001</span><x-jejaksa.badge value="medium" /></div>
                         <h3 class="mt-6">Header CSP belum diatur</h3>
                         <p class="mt-2 text-xs muted">staging.example.test / · HTTP headers</p>
                         <div class="mt-6 rounded-lg border border-slate-700 bg-slate-950/40 p-4">
-                            <p class="mb-3 text-[11px] muted">Bukti simulasi</p>
+                            <p class="mb-3 text-[11px] muted">Bukti</p>
                             <pre class="text-teal-200">HTTP/1.1 200 OK
 Content-Type: text/html
 Content-Security-Policy: [tidak ditemukan]</pre>
@@ -165,18 +165,18 @@ Content-Security-Policy: [tidak ditemukan]</pre>
             <aside class="scope-note" data-reveal="fade" aria-label="Batas penggunaan">
                 <x-jejaksa.icon name="shield" size="26" class="mt-1 text-teal-300" />
                 <h2>Pengujian tetap dalam kendali Anda.</h2>
-                <p>Gunakan target berizin dan tinjau hasilnya secara manual. Preview ini memakai data simulasi; integrasi tool dan AI mengikuti kesiapan backend.</p>
+                <p>Hanya target yang diverifikasi admin yang bisa diuji, dan setiap tool menolak request di luar scope. Tinjau hasilnya secara manual sebelum mengambil keputusan.</p>
             </aside>
 
             <section id="faq" class="landing-section">
                 <div class="editorial-grid items-start">
-                    <div data-reveal="rise"><p class="section-label">Ada pertanyaan?</p><h2 class="section-heading">Sebelum mulai.</h2><p class="section-copy">Beberapa hal tentang demo dan batas penggunaan Jejaksa.</p></div>
+                    <div data-reveal="rise"><p class="section-label">Ada pertanyaan?</p><h2 class="section-heading">Sebelum mulai.</h2><p class="section-copy">Beberapa hal tentang cara kerja dan batas penggunaan Jejaksa.</p></div>
                     <div data-reveal="fade">
                         @foreach([
-                            ['Apa yang bisa dicoba sekarang?', 'Buat akun, atur target demo, coba wizard scan, tinjau temuan, dan unduh laporan contoh. Demo tidak mengirim permintaan pengujian ke target.'],
-                            ['Apakah semua jenis kerentanan didukung?', 'Cakupan mengikuti tool, profil, dan integrasi backend yang tersedia. Tool aktif di katalog belum tentu siap menjalankan pengujian.'],
+                            ['Bagaimana alurnya?', 'Klien mendaftarkan target, admin memverifikasi izin pengujian, lalu analyst menjalankan scan dan agent AI. Temuan, laporan, dan sertifikat bisa dipantau dan dikomentari klien.'],
+                            ['Apakah semua jenis kerentanan didukung?', 'Belum. Saat ini Jejaksa memeriksa header keamanan, atribut cookie, token CSRF, reflected XSS, dan port terbuka. Celah logika bisnis tetap butuh pengujian manual.'],
                             ['Target seperti apa yang boleh diuji?', 'Gunakan web milik Anda atau target yang Anda memiliki izin untuk menguji. Tetapkan scope dan pengecualiannya terlebih dahulu.'],
-                            ['Apakah hasilnya menjamin aplikasi aman?', 'Hasil hanya berlaku pada scope dan waktu pengujian, serta tetap perlu ditinjau. Laporan atau sertifikat contoh bukan jaminan bebas kerentanan.'],
+                            ['Apakah hasilnya menjamin aplikasi aman?', 'Hasil hanya berlaku pada scope dan waktu pengujian, serta tetap perlu ditinjau. Laporan dan sertifikat bukan jaminan bebas kerentanan.'],
                         ] as [$question, $answer])
                             <details class="faq-item" data-faq>
                                 <summary>{{ $question }}</summary>

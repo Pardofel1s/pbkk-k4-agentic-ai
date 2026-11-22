@@ -92,7 +92,6 @@
 .workspace-body { margin-left:232px; min-height:100vh; }
 .topbar { height:72px; border-bottom:1px solid #263448; display:flex; align-items:center; justify-content:space-between; padding:0 32px; gap:16px; background:#0b1220ed; }
 .workspace-main { padding:30px 32px 48px; max-width:1600px; margin:auto; }
-.demo-strip { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 32px; background:#0d282c; color:#99d9d1; font-size:11px; border-bottom:1px solid #19464b; }
 .avatar { width:32px; height:32px; border-radius:50%; background:#184c4b; color:#99f6e4; display:inline-flex; justify-content:center; align-items:center; font-size:12px; font-weight:600; }
 .risk-bars { display:flex; gap:3px; height:6px; border-radius:6px; overflow:hidden; }
 .risk-bars span { display:block; min-width:5px; border-radius:2px; }
@@ -234,8 +233,6 @@
  .workspace-body { margin-left:0; }
  .workspace-main { padding:24px 16px; }
  .topbar { padding:0 16px; height:64px; }
- .demo-strip { padding:9px 16px; }
- .demo-strip > span:last-child { display:none; }
  .page-title { font-size:26px; }
  .landing-container { width:calc(100% - 40px); }
  .landing-nav { height:80px; }

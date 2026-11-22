@@ -27,7 +27,7 @@
                         <img class="brand-lockup" src="{{ asset('brand/jejaksa-logo-dark.svg') }}" alt="jejaksa" width="142" height="50">
                     </a>{{ $slot }}<div class="mt-8 border-t border-slate-700 pt-5 text-center text-xs muted">
                         <a class="text-link" href="{{ route('home') }}" wire:navigate>← Kembali ke beranda</a>
-                        <p class="mt-4">Workspace saat ini menggunakan data simulasi.</p>
+                        <p class="mt-4">Hanya target yang sudah diverifikasi admin yang diuji.</p>
                     </div>
                 </div>
             </main>

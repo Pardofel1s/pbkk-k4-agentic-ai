@@ -18,7 +18,7 @@ new #[Layout('layouts.app')] class extends Component
 
     public function mount(): void
     {
-        // Default to the local demo target so the agent has a real host to test.
+        // Default to the newest verified target the user can scan.
         $this->targetId = (int) $this->scannableTargets()->value('id');
         $this->sessionId = (int) ($this->sessions()->value('id') ?: 0) ?: null;
     }
@@ -93,8 +93,8 @@ new #[Layout('layouts.app')] class extends Component
 <div>
     <div class="page-head">
         <div>
-            <h1 class="page-title">Asisten AI · Live</h1>
-            <p class="page-description">Prompt dikirim ke {{ config('llm.model') }} (Senopati). Agent memanggil tool DAST pada target berizin.</p>
+            <h1 class="page-title">Asisten AI</h1>
+            <p class="page-description">Prompt dikirim ke {{ config('llm.model') }}. Agent memanggil tool DAST pada target berizin.</p>
         </div>
         @can('create', App\Models\ChatSession::class)
             <button wire:click="startSession" wire:loading.attr="disabled" type="button" class="btn-primary">
@@ -104,7 +104,7 @@ new #[Layout('layouts.app')] class extends Component
     </div>
 
     <div class="rounded-lg border border-teal-700 bg-teal-950/30 p-3 text-xs text-teal-100 mb-6">
-        Mode live — terhubung ke LLM dan tool nyata. Hanya target berstatus <strong>verified</strong> yang bisa diuji.
+        Terhubung ke LLM dan tool DAST sungguhan. Hanya target berstatus <strong>verified</strong> yang bisa diuji.
     </div>
 
     @error('prompt')
