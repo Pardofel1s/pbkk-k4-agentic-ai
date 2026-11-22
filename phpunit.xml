@@ -34,5 +34,6 @@
         <env name="NIGHTWATCH_ENABLED" value="false"/>
         <env name="ADMIN_PASSWORD" value="password"/>
         <env name="OLLAMA_ENABLED" value="false" force="true"/>
+        <env name="LLM_TOOL_ALLOWED_HOSTS" value="localhost,127.0.0.1" force="true"/>
     </php>
 </phpunit>

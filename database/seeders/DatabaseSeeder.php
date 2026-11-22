@@ -48,7 +48,21 @@ class DatabaseSeeder extends Seeder
             ->has(TargetTestAccount::factory(2))
             ->create();
 
+        // Team-owned deployments we may test; their hosts must also be in LLM_TOOL_ALLOWED_HOSTS.
+        foreach ([
+            'SchemaCrypt (demo)' => 'https://sch-schemacrypt.vercel.app',
+            'Cloudflare Tunnel (demo)' => 'https://female-dat-economy-characteristics.trycloudflare.com',
+        ] as $nama => $baseUrl) {
+            Target::factory()->for($client)->create([
+                'nama' => $nama,
+                'base_url' => $baseUrl,
+                'lingkungan' => 'production',
+                'status_verifikasi' => Target::VERIFIED,
+            ]);
+        }
+
         // Live demo target: the running app itself, so the agent's tools reach a real host on the allowlist.
+        // Seeded last so /agent picks it as the default target.
         Target::factory()->for($client)->create([
             'nama' => 'Jejaksa Local (demo)',
             'base_url' => 'http://localhost:8000',
