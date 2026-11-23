@@ -48,6 +48,33 @@ class FindingRules
         'reflected-xss' => ['Reflected Cross-Site Scripting', 'CWE-79', 'A03:2021 Injection', 'high',
             'Input dari parameter URL dipantulkan ke halaman tanpa encoding sehingga penyerang bisa menjalankan skrip di browser korban.',
             'Encode output sesuai konteks (HTML, atribut, JS) dan validasi input; tambahkan CSP sebagai lapisan kedua.'],
+        'exposed-sensitive-file' => ['File sensitif dapat diakses publik', 'CWE-538', 'A05:2021 Security Misconfiguration', 'high',
+            'File seperti .env, metadata .git, log, atau phpinfo bisa diunduh siapa saja dan membocorkan kunci, kredensial, atau source code.',
+            'Layani hanya folder public/, blokir dotfile dan folder log di web server, lalu ganti semua rahasia yang sempat terbuka.'],
+        'cors-any-origin' => ['CORS mempercayai origin mana pun', 'CWE-942', 'A05:2021 Security Misconfiguration', 'medium',
+            'Server memantulkan header Origin apa pun ke Access-Control-Allow-Origin sehingga situs lain bisa membaca respons API.',
+            'Gunakan allowlist origin yang tetap; jangan memantulkan Origin dan jangan percayai origin "null".'],
+        'cors-any-origin-credentials' => ['CORS mempercayai origin mana pun beserta kredensial', 'CWE-942', 'A01:2021 Broken Access Control', 'high',
+            'Situs lain bisa membaca respons atas nama pengguna yang sedang login karena Allow-Credentials aktif untuk origin apa pun.',
+            'Batasi Access-Control-Allow-Origin ke allowlist tetap dan aktifkan Allow-Credentials hanya untuk origin tersebut.'],
+        'version-disclosure' => ['Header membocorkan versi perangkat lunak', 'CWE-200', 'A05:2021 Security Misconfiguration', 'low',
+            'Header seperti Server atau X-Powered-By menyebut versi sehingga penyerang mudah mencari exploit yang cocok.',
+            'Hapus atau samarkan versi pada header Server/X-Powered-By (mis. server_tokens off, expose_php = Off).'],
+        'debug-error-page' => ['Halaman error menampilkan detail debug', 'CWE-209', 'A05:2021 Security Misconfiguration', 'medium',
+            'Halaman error menampilkan stack trace, path file, atau pesan SQL yang membantu penyerang memetakan aplikasi.',
+            'Matikan mode debug di lingkungan publik (APP_DEBUG=false) dan tampilkan halaman error generik.'],
+        'tls-weak-protocol' => ['Protokol TLS usang', 'CWE-326', 'A02:2021 Cryptographic Failures', 'medium',
+            'Server memakai SSL/TLS 1.0/1.1 yang sudah dinyatakan usang (RFC 8996) dan rentan serangan downgrade.',
+            'Aktifkan hanya TLS 1.2 dan TLS 1.3 di web server atau load balancer.'],
+        'tls-certificate-expired' => ['Sertifikat TLS kedaluwarsa', 'CWE-298', 'A02:2021 Cryptographic Failures', 'high',
+            'Browser menolak sertifikat kedaluwarsa, dan pengguna yang terbiasa mengabaikan peringatan mudah terkena serangan man-in-the-middle.',
+            'Perbarui sertifikat dan otomatiskan perpanjangan (mis. Let\'s Encrypt / certbot).'],
+        'tls-certificate-self-signed' => ['Sertifikat TLS self-signed', 'CWE-295', 'A02:2021 Cryptographic Failures', 'high',
+            'Sertifikat tidak diterbitkan CA tepercaya sehingga identitas server tidak bisa diverifikasi.',
+            'Pasang sertifikat dari CA tepercaya untuk semua host publik.'],
+        'tls-hostname-mismatch' => ['Nama host tidak cocok dengan sertifikat TLS', 'CWE-297', 'A02:2021 Cryptographic Failures', 'high',
+            'Sertifikat diterbitkan untuk nama lain sehingga browser menolak koneksi atau pengguna dilatih mengabaikan peringatan.',
+            'Terbitkan sertifikat yang mencakup nama host ini di subjectAltName.'],
     ];
 
     private const HEADER_TYPES = [
@@ -81,6 +108,7 @@ class FindingRules
             'check_cookie_flags' => $this->cookieFlags($output, $checked),
             'check_csrf_token' => $this->formsWithoutToken($output, $checked),
             'test_reflected_xss' => $this->reflectedXss($output, $checked),
+            'check_sensitive_files', 'check_cors', 'check_info_disclosure', 'check_tls' => $this->tagged($output, $checked),
             default => [],
         };
     }
@@ -150,6 +178,19 @@ class FindingRules
         preg_match_all('/^  - parameter "(.+?)": VULNERABLE/m', $output, $params);
 
         return array_map(fn (string $param): array => $this->finding('reflected-xss', $url, $param, $output), $params[1]);
+    }
+
+    /**
+     * Newer tools mark each problem line as "  - [type-slug] parameter: message".
+     */
+    private function tagged(string $output, string $url): array
+    {
+        preg_match_all('/^  - \[([a-z0-9-]+)\] (.+?): .+$/m', $output, $lines, PREG_SET_ORDER);
+
+        return array_values(array_map(
+            fn (array $line): array => $this->finding($line[1], $url, $line[2], trim($line[0])."\n\n{$output}"),
+            array_filter($lines, fn (array $line): bool => isset(self::TYPES[$line[1]])),
+        ));
     }
 
     private function finding(string $slug, string $url, ?string $parameter, string $proof): array

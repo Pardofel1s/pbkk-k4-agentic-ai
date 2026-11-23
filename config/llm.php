@@ -54,6 +54,10 @@ return [
         App\Tools\CheckCsrfTokenTool::class,
         App\Tools\ScanOpenPortsTool::class,
         App\Tools\TestReflectedXssTool::class,
+        App\Tools\CheckSensitiveFilesTool::class,
+        App\Tools\CheckCorsTool::class,
+        App\Tools\CheckInfoDisclosureTool::class,
+        App\Tools\CheckTlsTool::class,
     ],
 
     /*
