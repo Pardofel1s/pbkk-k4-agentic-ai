@@ -40,15 +40,32 @@ flowchart TD
     Rules --> Retest["Re-test: temuan yang hilang → fixed"]
 ```
 
-| Tool | Temuan yang dihasilkan |
-|---|---|
-| `check_security_headers` | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy hilang; HSTS hilang (khusus HTTPS) |
-| `check_cookie_flags` | Cookie tanpa `Secure`, `HttpOnly`, atau `SameSite` |
-| `check_csrf_token` | Form POST tanpa token CSRF |
-| `test_reflected_xss` | Parameter yang memantulkan payload tanpa encoding |
-| `scan_open_ports` | Tidak menghasilkan temuan otomatis (butuh `nmap` di server; dinilai analyst/AI) |
+Setiap tool dipetakan ke satu atau lebih kasus uji **OWASP Web Security Testing Guide (WSTG) v4.2**. Semuanya black-box dan tidak merusak (hanya GET/handshake, tanpa brute force, fuzzing, atau SQLi), sesuai syarat rancangan bahwa DAST di staging tidak boleh mengganggu layanan.
 
-Seeder membuat tiga profil scan: **Baseline Web** (header + cookie), **Web Lengkap** (+ CSRF + XSS), dan **Port Discovery** (nmap). Contoh hasil nyata: profil Web Lengkap ke `http://localhost:8000` menghasilkan 8 temuan dalam ±5 detik.
+| Tool | Kasus uji | Temuan yang dihasilkan |
+|---|---|---|
+| `check_security_headers` | WSTG-CONF-07, CONF-12 | CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy hilang; HSTS hilang (khusus HTTPS) |
+| `check_cookie_flags` | WSTG-SESS-02 | Cookie tanpa `Secure`, `HttpOnly`, atau `SameSite` |
+| `check_csrf_token` | WSTG-SESS-05 | Form POST tanpa token CSRF |
+| `test_reflected_xss` | WSTG-INPV-01 | Parameter yang memantulkan payload tanpa encoding |
+| `check_sensitive_files` | WSTG-CONF-04/05, INFO-03 | `.env`, `.git/HEAD`, `.git/config`, `laravel.log`, `phpinfo.php`, `.DS_Store`, `server-status` bisa diunduh (CWE-538). Dihitung terbuka hanya jika HTTP 200 **dan** isinya cocok dengan signature file, supaya SPA yang menjawab 200 untuk semua path tidak jadi false positive |
+| `check_cors` | WSTG-CLNT-07 | `Access-Control-Allow-Origin` memantulkan origin asing atau `null`, dengan/tanpa `Allow-Credentials` (CWE-942) |
+| `check_info_disclosure` | WSTG-INFO-02, ERRH-01/02 | Header `Server`/`X-Powered-By`/dll. yang menyebut versi (CWE-200); stack trace, pesan SQL, atau halaman debug di halaman dan path yang tidak ada (CWE-209) |
+| `check_tls` | WSTG-CRYP-01 | Protokol SSL/TLS 1.0/1.1 (CWE-326), sertifikat kedaluwarsa (CWE-298), self-signed (CWE-295), nama host tidak cocok (CWE-297). Hanya target HTTPS |
+| `scan_open_ports` | WSTG-INFO-02, NIST SP 800-115 §4 | Tidak menghasilkan temuan otomatis (butuh `nmap` di server; dinilai analyst/AI) |
+
+Seeder membuat empat profil scan: **Baseline Web** (header + cookie), **Web Lengkap** (semua tool web), **Konfigurasi Server** (file sensitif, CORS, kebocoran info, TLS), dan **Port Discovery** (nmap). Contoh hasil nyata (24 Nov 2026): `check_info_disclosure` ke `http://localhost:8000` menemukan `X-Powered-By: PHP/8.4.14`; SchemaCrypt dan Cloudflare Tunnel App lolos keempat tool baru (TLS 1.3, sertifikat valid, tidak ada file atau CORS yang terbuka).
+
+#### Referensi metode pengujian
+
+- OWASP, *Web Security Testing Guide v4.2*, 2020. https://wstg.owasp.org/v4.2/ — katalog kasus uji yang menjadi dasar setiap tool.
+- K. Scarfone, M. Souppaya, A. Cody, A. Orebaugh, *NIST SP 800-115: Technical Guide to Information Security Testing and Assessment*, NIST, 2008. doi:10.6028/NIST.SP.800-115 — tahapan identifikasi target (port/service scan), pemindaian, dan validasi.
+- J. Bau, E. Bursztein, D. Gupta, J. Mitchell, "State of the Art: Automated Black-Box Web Application Vulnerability Testing," *IEEE Symposium on Security and Privacy*, 2010.
+- A. Doupé, M. Cova, G. Vigna, "Why Johnny Can't Pentest: An Analysis of Black-Box Web Vulnerability Scanners," *DIMVA*, LNCS 6201, 2010.
+- G. Deng et al., "PentestGPT: Evaluating and Harnessing Large Language Models for Automated Penetration Testing," *USENIX Security*, 2024 — pola reasoning → tool → parsing yang mirip agent + `FindingRules` di sini.
+- D. Stuttard, M. Pinto, *The Web Application Hacker's Handbook*, 2nd ed., Wiley, 2011.
+
+Kandidat berikutnya yang sengaja belum dibuat karena berisiko untuk staging: SQL injection (WSTG-INPV-05), brute force login (WSTG-ATHN-03), crawler. Tool baru cukup mengimplementasikan `App\Tools\Tool`, didaftarkan di `config/llm.php`, dan diberi aturan di `FindingRules` (baris `  - [slug] parameter: pesan`).
 
 Batasan yang diketahui: akun uji dicatat pada scan tetapi tool belum login memakai akun tersebut (pengujian masih halaman publik).
 
@@ -216,7 +233,7 @@ php artisan test --compact tests/Feature/Api --stop-on-failure
 
 Cakupan meliputi pemilihan provider, fallback, autentikasi key provider, system prompt, streaming, penggunaan token, login/logout Sanctum, HTTP 401/422/502, format resource, serta penyimpanan log. `Http::fake()` digunakan untuk request LLM; hasil ini tidak membuktikan koneksi ke provider asli.
 
-Pengujian seluruh suite lokal terbaru berhasil: **207 passed, 878 assertions** (termasuk workspace, mesin scan, agent, RBAC, API, dan tool). CI GitHub Actions menjalankan suite yang sama.
+Pengujian seluruh suite lokal terbaru berhasil: **225 passed, 916 assertions** (termasuk workspace, mesin scan, agent, RBAC, API, dan tool). CI GitHub Actions menjalankan suite yang sama.
 
 ```bash
 npm ci
@@ -395,6 +412,8 @@ Bersama: pengujian end-to-end aplikasi & pembaruan dokumentasi pada `README.md`.
 | #16 | 17 Nov 2026 | Membuang "proses berpikir" qwen3 yang bocor ke `content` sebelum `</think>`. |
 | #17 | 22 Nov 2026 | Seeder: situs milik tim (SchemaCrypt di Vercel, aplikasi lewat Cloudflare Tunnel) sebagai target; allowlist host di `.env.example`. |
 | #18 | 22 Nov 2026 | Workspace memakai data dan aksi nyata; mesin scan (`RunScan` + `FindingRules`), laporan per versi, Analisis AI, sertifikat, pengguna, katalog tool; `/chat` → `/agent`; semua label demo dihapus. |
+| #19 | 23 Nov 2026 | README diperbarui: status aplikasi, mesin scan, guardrail OOT/OOB, perbandingan model. |
+| #20 | 24 Nov 2026 | 4 tool baru berbasis OWASP WSTG: `check_sensitive_files`, `check_cors`, `check_info_disclosure`, `check_tls`; profil **Konfigurasi Server**; referensi metode pengujian. |
 
 ## Menuju UAS (Week 16)
 
@@ -405,7 +424,7 @@ Bersama: pengujian end-to-end aplikasi & pembaruan dokumentasi pada `README.md`.
 | RBAC Spatie sesuai [`docs/rbac.md`](docs/rbac.md) (seeder, Policy, action class), tabel `comments`, CRUD lengkap, API Sanctum (login token + `POST /api/chat-ai`, lihat [`docs/api-chat-ai.md`](docs/api-chat-ai.md)) | BE-1 | ✅ |
 | Halaman per role sesuai [`docs/rbac.md`](docs/rbac.md): target, verifikasi, kelola user, detail scan/finding/report + komentar | FE | ✅ |
 | Agent loop otonom, tools sesuai tema, mitigasi command injection, eksekusi via Queue | BE-2 | ✅ agent + scan di queue |
-| Minimal 5 skenario test lulus | Semua | ✅ 207 test |
+| Minimal 5 skenario test lulus | Semua | ✅ 225 test |
 
 Rubrik UAS: demo **wajib** dari binary NativePHP (bukan browser), prompt → function calling → hasil tool. Siapkan cadangan Ollama `qwen3:14b` + video demo.
 

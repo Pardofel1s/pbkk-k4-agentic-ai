@@ -38,7 +38,8 @@ class DatabaseSeeder extends Seeder
 
         foreach ([
             ['Baseline Web', 'quick', 'Header keamanan dan atribut cookie. Cepat dan aman untuk pemeriksaan awal.', ['check_security_headers', 'check_cookie_flags']],
-            ['Web Lengkap', 'full', 'Baseline ditambah token CSRF pada form dan probe reflected XSS.', ['check_security_headers', 'check_cookie_flags', 'check_csrf_token', 'test_reflected_xss']],
+            ['Web Lengkap', 'full', 'Baseline, token CSRF, reflected XSS, file sensitif, CORS, kebocoran info, dan TLS.', ['check_security_headers', 'check_cookie_flags', 'check_csrf_token', 'test_reflected_xss', 'check_sensitive_files', 'check_cors', 'check_info_disclosure', 'check_tls']],
+            ['Konfigurasi Server', 'quick', 'File sensitif yang terbuka, CORS, header versi/halaman debug, dan TLS (OWASP WSTG CONF/INFO/ERRH/CRYP/CLNT).', ['check_sensitive_files', 'check_cors', 'check_info_disclosure', 'check_tls']],
             ['Port Discovery', 'quick', 'Pemetaan port TCP umum dengan nmap (nmap harus terpasang di server).', ['scan_open_ports']],
         ] as [$nama, $tipe, $deskripsi, $tools]) {
             ScanProfile::query()->create(['nama' => $nama, 'tipe' => $tipe, 'deskripsi' => $deskripsi, 'pengaturan' => ['tools' => $tools]]);
